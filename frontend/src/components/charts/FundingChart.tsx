@@ -55,10 +55,13 @@ export function FundingChart({ data, isLoading, height = 220, annualized = false
     );
   }
 
-  const chartData = data.map((d) => ({
-    time: d.time,
-    rate: d.fundingRate,
-  }));
+  const chartData = data.map((d) => {
+    const raw = d as unknown as Record<string, unknown>;
+    return {
+      time: Number(raw.time ?? raw.timestamp ?? 0),
+      rate: Number(raw.fundingRate ?? raw.funding_rate ?? raw.rate ?? 0),
+    };
+  });
 
   return (
     <ResponsiveContainer width="100%" height={height}>

@@ -118,9 +118,18 @@ export function VolumeChart({ data, isLoading, height = 220 }: VolumeChartProps)
     );
   }
 
+  // Handle both candle data format and volume history format
+  const chartData = data.map((d) => {
+    const raw = d as unknown as Record<string, unknown>;
+    return {
+      date: raw.date ?? (raw.time ? formatDate(Number(raw.time), { short: true }) : ''),
+      volume: Number(raw.volume ?? raw.perpVolume ?? raw.total ?? raw.total_volume ?? 0),
+    };
+  });
+
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
+      <BarChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.grid} vertical={false} strokeOpacity={0.5} />
         <XAxis
           dataKey="date"
@@ -136,9 +145,7 @@ export function VolumeChart({ data, isLoading, height = 220 }: VolumeChartProps)
           width={60}
         />
         <Tooltip content={<VolumeTooltip />} />
-        <Legend iconType="square" wrapperStyle={{ fontSize: 11 }} />
-        <Bar dataKey="perpVolume" name="Perp" fill={CHART_COLORS.cyan} fillOpacity={0.8} radius={[2, 2, 0, 0]} isAnimationActive={false} stackId="v" />
-        <Bar dataKey="spotVolume" name="Spot" fill={CHART_COLORS.green} fillOpacity={0.8} radius={[2, 2, 0, 0]} isAnimationActive={false} stackId="v" />
+        <Bar dataKey="volume" name="Volume" fill={CHART_COLORS.cyan} fillOpacity={0.8} radius={[2, 2, 0, 0]} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
   );

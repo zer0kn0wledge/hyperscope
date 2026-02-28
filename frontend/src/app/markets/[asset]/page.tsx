@@ -8,7 +8,6 @@ import { PageContainer, SectionHeader } from '@/components/layout/PageContainer'
 import { PriceChart } from '@/components/charts/PriceChart';
 import { FundingChart } from '@/components/charts/FundingChart';
 import { VolumeChart } from '@/components/charts/VolumeChart';
-import { AreaChart } from '@/components/charts/AreaChart';
 import { Select } from '@/components/ui/Select';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
@@ -22,11 +21,12 @@ import {
 import { useAssetTradesWS } from '@/hooks/useWebSocket';
 import { formatUSD, formatPrice, formatPercent, formatDate } from '@/lib/format';
 import { TOP_PAIRS, TIMEFRAME_OPTIONS } from '@/lib/constants';
-import type { Liquidation, Trade } from '@/lib/types';
+
+type AnyRecord = Record<string, unknown>;
 
 const ASSET_OPTIONS = TOP_PAIRS.map((p) => ({ value: p, label: p }));
 
-const LIQ_COLUMNS: Column<Liquidation>[] = [
+const LIQ_COLUMNS: Column<AnyRecord>[] = [
   {
     key: 'side',
     header: 'Side',
@@ -80,7 +80,9 @@ export default function AssetPage() {
     useAssetLiquidations(asset);
   const { data: allRates } = useFundingRates();
 
-  const currentRate = allRates?.find((r) => r.coin === asset);
+  // Find current rate - backend returns snake_case with asset or coin field
+  const rates = (allRates ?? []) as AnyRecord[];
+  const currentRate = rates.find((r) => String(r.asset ?? r.coin) === asset);
   const trades = useAssetTradesWS(asset);
 
   return (
@@ -100,16 +102,16 @@ export default function AssetPage() {
             </h1>
             {currentRate && (
               <p className="text-sm text-text-secondary">
-                Mark: ${formatPrice(currentRate.mark_price)} &nbsp;·&nbsp;
+                Mark: ${formatPrice(Number(currentRate.mark_px ?? currentRate.mark_price ?? 0))} &nbsp;·&nbsp;
                 FR:{' '}
                 <span
                   className={
-                    currentRate.funding_rate >= 0
+                    Number(currentRate.funding_rate ?? 0) >= 0
                       ? 'text-accent-green'
                       : 'text-accent-red'
                   }
                 >
-                  {formatPercent(currentRate.funding_rate, 4)}
+                  {formatPercent(Number(currentRate.funding_rate ?? 0), 4)}
                 </span>
               </p>
             )}
@@ -127,42 +129,37 @@ export default function AssetPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KPICard
             label="Open Interest"
-            value={currentRate.open_interest}
-            format="usd"
+            value={formatUSD(Number(currentRate.oi_usd ?? currentRate.open_interest ?? 0))}
           />
           <KPICard
             label="24h Volume"
-            value={currentRate.volume_24h}
-            format="usd"
+            value={formatUSD(Number(currentRate.volume_24h ?? 0))}
           />
           <KPICard
             label="Funding Rate"
-            value={currentRate.funding_rate}
-            format="percent"
-            precision={4}
+            value={formatPercent(Number(currentRate.funding_rate ?? 0), 4)}
           />
           <KPICard
             label="24h Change"
-            value={currentRate.price_change_24h}
-            format="percent"
+            value={formatPercent(Number(currentRate.price_change_24h ?? 0))}
           />
         </div>
       )}
 
       {/* Price Chart */}
       <SectionHeader title="Price" subtitle={`${asset} OHLCV — ${timeframe}`} />
-      <PriceChart data={candles ?? []} isLoading={candlesLoading} />
+      <PriceChart data={(candles ?? []) as AnyRecord[]} isLoading={candlesLoading} />
 
       {/* Funding History */}
       <SectionHeader
         title="Funding Rate History"
         subtitle="8-hour funding payments"
       />
-      <FundingChart data={funding ?? []} isLoading={fundingLoading} />
+      <FundingChart data={(funding ?? []) as AnyRecord[]} isLoading={fundingLoading} />
 
       {/* Volume */}
       <SectionHeader title="Volume" subtitle="Per-candle trading volume" />
-      <VolumeChart data={candles ?? []} isLoading={candlesLoading} />
+      <VolumeChart data={(candles ?? []) as AnyRecord[]} isLoading={candlesLoading} />
 
       {/* Liquidations */}
       <SectionHeader
@@ -171,7 +168,7 @@ export default function AssetPage() {
       />
       <DataTable
         columns={LIQ_COLUMNS}
-        data={liquidations ?? []}
+        data={(liquidations ?? []) as AnyRecord[]}
         isLoading={liqLoading}
         rowKey={(l) => `${l.time}-${l.price}`}
         skeletonRows={8}
