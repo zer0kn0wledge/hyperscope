@@ -77,6 +77,34 @@ export interface OIDistributionEntry {
   percentage: number;
 }
 
+// Type aliases matching what pages import (snake_case to match backend)
+// Backend returns: {asset, funding_rate, funding_rate_annual_pct, predicted_funding, mark_px, oi_usd}
+export interface FundingRate {
+  asset: string;
+  coin?: string;
+  funding_rate: number;
+  funding_rate_annual_pct: number;
+  predicted_funding: number;
+  mark_px: number;
+  mark_price?: number;
+  oi_usd: number;
+  open_interest?: number;
+  volume_24h?: number;
+  price_change_24h?: number;
+  predicted_rate?: number;
+  [key: string]: unknown;
+}
+
+// Backend returns: {assets: [{asset, oi_usd, oi_base, oi_pct}], total_oi_usd}
+export interface OIDistribution {
+  asset: string;
+  coin?: string;
+  oi_usd: number;
+  oi_base: number;
+  oi_pct: number;
+  [key: string]: unknown;
+}
+
 export interface VolumeHistoryEntry {
   date: string;
   perpVolume: number;

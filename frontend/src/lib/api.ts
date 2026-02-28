@@ -154,7 +154,7 @@ export const tradersAPI = {
   getOpenOrders: (address: string) =>
     request<OpenOrder[]>(`/api/traders/${address}/orders`),
   getSubAccounts: (address: string) =>
-    request<SubAccount[]>(`/api/traders/${address}/subaccounts`),
+    request<SubAccount[]>(`/api/traders/${address}/sub-accounts`),
 };
 
 // Protocol API

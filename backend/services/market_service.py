@@ -195,9 +195,23 @@ class MarketService:
                 if isinstance(item, list) and len(item) >= 2:
                     coin = item[0]
                     venues = item[1]
-                    if isinstance(venues, list) and venues:
-                        # Take the first venue's predicted funding
-                        predicted_map[coin] = venues[0].get("sampleFunding", 0)
+                    if isinstance(venues, list):
+                        # Find the HlPerp venue first, otherwise take first non-null venue
+                        for venue_data in venues:
+                            if isinstance(venue_data, list) and len(venue_data) >= 2:
+                                venue_name = venue_data[0]
+                                rate_info = venue_data[1]
+                                if venue_name == "HlPerp" and isinstance(rate_info, dict):
+                                    predicted_map[coin] = float(rate_info.get("fundingRate", 0) or 0)
+                                    break
+                        else:
+                            # Fallback: use first non-null venue
+                            for venue_data in venues:
+                                if isinstance(venue_data, list) and len(venue_data) >= 2:
+                                    rate_info = venue_data[1]
+                                    if isinstance(rate_info, dict):
+                                        predicted_map[coin] = float(rate_info.get("fundingRate", 0) or 0)
+                                        break
 
         if isinstance(meta_result, list) and len(meta_result) == 2:
             meta, asset_ctxs = meta_result

@@ -4,16 +4,15 @@ import Link from 'next/link';
 import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Badge } from '@/components/ui/Badge';
-import { Sparkline } from '@/components/charts/Sparkline';
 import { useFundingRates, useOIDistribution } from '@/hooks/useAPI';
 import { formatUSD, formatPercent, formatPrice } from '@/lib/format';
 import type { FundingRate, OIDistribution } from '@/lib/types';
 
 const FUNDING_COLUMNS: Column<FundingRate>[] = [
   {
-    key: 'coin',
+    key: 'asset',
     header: 'Asset',
-    render: (v, row) => (
+    render: (v) => (
       <Link
         href={`/markets/${String(v)}`}
         className="font-medium text-text-primary hover:text-accent-cyan transition-colors"
@@ -23,7 +22,7 @@ const FUNDING_COLUMNS: Column<FundingRate>[] = [
     ),
   },
   {
-    key: 'mark_price',
+    key: 'mark_px',
     header: 'Mark Price',
     align: 'right',
     sortable: true,
@@ -52,7 +51,7 @@ const FUNDING_COLUMNS: Column<FundingRate>[] = [
     },
   },
   {
-    key: 'predicted_rate',
+    key: 'predicted_funding',
     header: 'Predicted',
     align: 'right',
     sortable: true,
@@ -74,22 +73,15 @@ const FUNDING_COLUMNS: Column<FundingRate>[] = [
     },
   },
   {
-    key: 'open_interest',
+    key: 'oi_usd',
     header: 'Open Interest',
     align: 'right',
     sortable: true,
     render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
   },
   {
-    key: 'volume_24h',
-    header: '24h Volume',
-    align: 'right',
-    sortable: true,
-    render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
-  },
-  {
-    key: 'price_change_24h',
-    header: '24h Change',
+    key: 'funding_rate_annual_pct',
+    header: 'Annual Rate',
     align: 'right',
     sortable: true,
     render: (v) => {
@@ -105,7 +97,7 @@ const FUNDING_COLUMNS: Column<FundingRate>[] = [
 
 const OI_COLUMNS: Column<OIDistribution>[] = [
   {
-    key: 'coin',
+    key: 'asset',
     header: 'Asset',
     render: (v) => (
       <span className="font-medium text-text-primary">{String(v)}</span>
@@ -129,7 +121,10 @@ const OI_COLUMNS: Column<OIDistribution>[] = [
 
 export default function MarketsPage() {
   const { data: funding, isLoading: fundingLoading } = useFundingRates();
-  const { data: oi, isLoading: oiLoading } = useOIDistribution();
+  const { data: oiRaw, isLoading: oiLoading } = useOIDistribution();
+
+  // Backend returns {assets: [...], total_oi_usd} — extract assets array
+  const oiData = Array.isArray(oiRaw) ? oiRaw : (oiRaw as Record<string, unknown>)?.assets as OIDistribution[] ?? [];
 
   return (
     <PageContainer>
@@ -141,7 +136,7 @@ export default function MarketsPage() {
         columns={FUNDING_COLUMNS}
         data={funding ?? []}
         isLoading={fundingLoading}
-        rowKey={(r) => r.coin}
+        rowKey={(r) => r.asset}
         skeletonRows={20}
       />
 
@@ -152,9 +147,9 @@ export default function MarketsPage() {
       />
       <DataTable
         columns={OI_COLUMNS}
-        data={oi ?? []}
+        data={oiData}
         isLoading={oiLoading}
-        rowKey={(r) => r.coin}
+        rowKey={(r) => r.asset}
         skeletonRows={10}
       />
     </PageContainer>

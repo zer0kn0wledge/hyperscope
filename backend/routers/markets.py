@@ -28,6 +28,15 @@ VALID_INTERVALS = {
 }
 
 
+@router.get("/assets", summary="All perp assets with market data")
+async def get_all_assets() -> list[dict[str, Any]]:
+    """
+    All perp assets with current market data (price, change, volume, OI, funding).
+    Essentially the same as the heatmap but exposed under /markets for clarity.
+    """
+    return await market_service.get_heatmap()
+
+
 @router.get("/funding-rates", summary="All perp pairs funding rates")
 async def get_funding_rates() -> list[dict[str, Any]]:
     """

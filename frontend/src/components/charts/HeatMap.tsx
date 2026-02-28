@@ -47,14 +47,25 @@ export function HeatMap({ data, isLoading }: HeatMapProps) {
     );
   }
 
-  const maxVolume = Math.max(...data.map((d) => d.volume24h));
-  const sorted = [...data].sort((a, b) => b.volume24h - a.volume24h);
+  // Backend returns snake_case fields: change_pct, volume_24h, oi_usd
+  const vol = (d: Record<string, unknown>) => Number(d.volume_24h ?? d.volume24h ?? 0);
+  const chg = (d: Record<string, unknown>) => Number(d.change_pct ?? d.priceChange24h ?? 0);
+  const oi = (d: Record<string, unknown>) => Number(d.oi_usd ?? d.openInterest ?? 0);
+
+  const maxVolume = Math.max(...data.map((d) => vol(d as unknown as Record<string, unknown>)));
+  const sorted = [...data].sort((a, b) =>
+    vol(b as unknown as Record<string, unknown>) - vol(a as unknown as Record<string, unknown>)
+  );
 
   return (
     <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 xl:grid-cols-10 2xl:grid-cols-12 gap-1.5">
       {sorted.map((asset) => {
-        const bgColor = getHeatmapColor(asset.priceChange24h);
-        const opacity = getOpacity(asset.volume24h, maxVolume);
+        const raw = asset as unknown as Record<string, unknown>;
+        const change = chg(raw);
+        const volume = vol(raw);
+        const openInterest = oi(raw);
+        const bgColor = getHeatmapColor(change);
+        const opacity = getOpacity(volume, maxVolume);
 
         return (
           <Link
@@ -72,25 +83,25 @@ export function HeatMap({ data, isLoading }: HeatMapProps) {
             </div>
             <div className="space-y-0.5">
               <div className="text-white text-xs font-bold number leading-tight">
-                {formatPercent(asset.priceChange24h)}
+                {formatPercent(change)}
               </div>
               <div className="text-white/70 text-[9px] number leading-tight">
-                {formatUSD(asset.volume24h)}
+                {formatUSD(volume)}
               </div>
             </div>
             {/* Hover tooltip */}
             <div className="absolute inset-0 bg-bg-elevated/90 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-lg flex flex-col justify-center p-2 z-10">
               <div className="text-text-primary text-xs font-bold">{asset.asset}</div>
               <div className={cn('text-xs number font-medium mt-0.5',
-                asset.priceChange24h >= 0 ? 'text-accent-cyan' : 'text-accent-red'
+                change >= 0 ? 'text-accent-cyan' : 'text-accent-red'
               )}>
-                {formatPercent(asset.priceChange24h)}
+                {formatPercent(change)}
               </div>
               <div className="text-text-tertiary text-[10px] mt-0.5">
-                Vol: {formatUSD(asset.volume24h)}
+                Vol: {formatUSD(volume)}
               </div>
               <div className="text-text-tertiary text-[10px]">
-                OI: {formatUSD(asset.openInterest)}
+                OI: {formatUSD(openInterest)}
               </div>
             </div>
           </Link>

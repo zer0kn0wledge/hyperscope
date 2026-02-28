@@ -73,11 +73,10 @@ export default function OverviewPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KPICard
           label="Total Open Interest"
-          value={kpis?.total_oi}
+          value={kpis?.total_open_interest}
           format="usd"
           isLoading={kpisLoading}
           sparklineData={sparklines?.oi}
-          trend={kpis?.oi_change_24h}
         />
         <KPICard
           label="24h Volume"
@@ -85,21 +84,20 @@ export default function OverviewPage() {
           format="usd"
           isLoading={kpisLoading}
           sparklineData={sparklines?.volume}
-          trend={kpis?.volume_change_24h}
         />
         <KPICard
-          label="Active Traders (24h)"
-          value={kpis?.active_traders_24h}
-          format="number"
-          isLoading={kpisLoading}
-          trend={kpis?.traders_change_24h}
-        />
-        <KPICard
-          label="Protocol Revenue (24h)"
-          value={kpis?.protocol_revenue_24h}
+          label="HYPE Price"
+          value={kpis?.hype_price}
           format="usd"
           isLoading={kpisLoading}
-          trend={kpis?.revenue_change_24h}
+          sparklineData={sparklines?.hype_price}
+          trend={kpis?.hype_change_24h}
+        />
+        <KPICard
+          label="TVL"
+          value={kpis?.tvl}
+          format="usd"
+          isLoading={kpisLoading}
         />
       </div>
 
