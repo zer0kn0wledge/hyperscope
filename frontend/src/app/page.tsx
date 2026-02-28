@@ -1,264 +1,189 @@
 'use client';
 
-import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
+import { PageContainer, SectionHeader } from '@/components/ui/PageLayout';
+import { useMarketOverview } from '@/hooks/useHyperscope';
 import { KPICard } from '@/components/ui/KPICard';
-import { HeatMap } from '@/components/charts/HeatMap';
 import { Sparkline } from '@/components/charts/Sparkline';
-import { AreaChartComponent } from '@/components/charts/AreaChart';
-import { DataTable, type Column } from '@/components/ui/DataTable';
-import { Badge } from '@/components/ui/Badge';
-import {
-  useKPIs,
-  useHeatmap,
-  useSparklines,
-  useLargeTrades,
-  useVolumeHistory,
-  useOIDistribution,
-  useFundingRates,
-} from '@/hooks/useAPI';
-import { useLargeTradesWS } from '@/hooks/useWebSocket';
-import { formatUSD, formatPercent, formatPrice, formatDate, formatFunding, fundingClass } from '@/lib/format';
-import { CHART_COLORS } from '@/lib/constants';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { HeatMap } from '@/components/charts/HeatMap';
+import { fmt } from '@/lib/format';
+import Link from 'next/link';
 
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
-}
+export default function HomePage() {
+  const { data, isLoading, error } = useMarketOverview();
 
-type AnyRecord = Record<string, unknown>;
+  if (isLoading)
+    return (
+      <PageContainer>
+        <div className="flex flex-col items-center justify-center h-64 gap-3">
+          <div className="text-neon-green animate-pulse font-mono text-sm">
+            initializing hyperscope...
+          </div>
+          <div className="w-32 h-px bg-gradient-to-r from-transparent via-neon-green/50 to-transparent animate-pulse" />
+        </div>
+      </PageContainer>
+    );
 
-// Trade table columns
-const TRADE_COLUMNS: Column<AnyRecord>[] = [
-  {
-    key: 'side',
-    header: 'Side',
-    render: (v) => {
-      const side = String(v ?? '').toLowerCase();
-      if (side !== 'buy' && side !== 'sell') return <span className="text-text-muted">-</span>;
-      return (
-        <Badge variant={side === 'buy' ? 'buy' : 'sell'}>
-          {side.toUpperCase()}
-        </Badge>
-      );
-    },
-  },
-  {
-    key: 'coin',
-    header: 'Asset',
-    render: (v) => <span className="font-medium text-text-primary">{String(v ?? '-')}</span>,
-  },
-  {
-    key: 'price',
-    header: 'Price',
-    align: 'right',
-    render: (v) => {
-      const num = Number(v);
-      return <span className="number">{isFinite(num) && num > 0 ? `$${formatPrice(num)}` : '-'}</span>;
-    },
-  },
-  {
-    key: 'size',
-    header: 'Size',
-    align: 'right',
-    render: (v) => {
-      const num = Number(v);
-      return <span className="number">{isFinite(num) ? num.toFixed(4) : '-'}</span>;
-    },
-  },
-  {
-    key: 'notional',
-    header: 'Notional',
-    align: 'right',
-    render: (v) => {
-      const num = Number(v);
-      return <span className="number">{isFinite(num) && num > 0 ? formatUSD(num) : '-'}</span>;
-    },
-  },
-  {
-    key: 'time',
-    header: 'Time',
-    align: 'right',
-    render: (v) => {
-      const num = Number(v);
-      return (
-        <span className="number text-text-secondary">{isFinite(num) && num > 0 ? formatDate(num) : '-'}</span>
-      );
-    },
-  },
-];
+  if (error || !data)
+    return (
+      <PageContainer>
+        <div className="text-red-400 font-mono text-sm">error loading market data</div>
+      </PageContainer>
+    );
 
-// Funding rate columns for top assets
-const FUNDING_COLUMNS: Column<AnyRecord>[] = [
-  {
-    key: 'asset',
-    header: 'Asset',
-    render: (v) => <span className="font-medium text-text-primary">{String(v ?? (v as AnyRecord)?.coin)}</span>,
-  },
-  {
-    key: 'funding_rate',
-    header: 'Funding Rate',
-    align: 'right',
-    render: (v) => {
-      const val = Number(v);
-      if (!isFinite(val)) return <span className="text-text-muted">-</span>;
-      return <span className={cn('number', fundingClass(val))}>{formatFunding(val)}</span>;
-    },
-  },
-  {
-    key: 'mark_px',
-    header: 'Mark Price',
-    align: 'right',
-    render: (v) => <span className="number">${formatPrice(Number(v))}</span>,
-  },
-  {
-    key: 'oi_usd',
-    header: 'Open Interest',
-    align: 'right',
-    render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
-  },
-];
+  const snapshot = data.snapshot ?? {};
+  const fearGreed = data.fear_greed;
+  const globalOI = data.global_oi;
+  const liquidations = data.liquidations;
+  const hypePrice = data.hype_price;
+  const tvl = data.tvl;
+  const fees = data.fees;
 
-export default function OverviewPage() {
-  const { data: kpis, isLoading: kpisLoading } = useKPIs();
-  const { data: heatmap, isLoading: heatmapLoading } = useHeatmap();
-  const { data: sparklines } = useSparklines();
-  const { data: initialTrades, isLoading: tradesLoading } = useLargeTrades();
-  const { data: volumeHistory, isLoading: volLoading } = useVolumeHistory();
-  const { data: oiDist, isLoading: oiLoading } = useOIDistribution();
-  const { data: fundingRates, isLoading: fundLoading } = useFundingRates();
+  // Top assets
+  const assets: Array<{
+    name: string;
+    mark_price?: number;
+    open_interest_usd?: number;
+    day_volume?: number;
+    funding?: number;
+    price_change_pct?: number;
+  }> = snapshot.assets ?? [];
 
-  const trades = useLargeTradesWS((initialTrades ?? []) as AnyRecord[]);
+  const topAssets = assets
+    .sort((a, b) => (b.open_interest_usd ?? 0) - (a.open_interest_usd ?? 0))
+    .slice(0, 20);
 
-  // Type the kpis response loosely since backend returns snake_case
-  const k = kpis as AnyRecord | undefined;
-
-  // Sparklines data
-  const spark = sparklines as AnyRecord | undefined;
-  const sparkOI = (spark?.oi ?? spark?.openInterest ?? []) as number[];
-  const sparkVol = (spark?.volume ?? []) as number[];
-  const sparkHype = (spark?.hype_price ?? spark?.hypePrice ?? []) as number[];
-
-  // Volume history for chart (backend returns {timestamp, total_volume})
-  const volChartData = ((volumeHistory ?? []) as AnyRecord[]).map((d) => ({
-    time: Number(d.timestamp ?? d.date ?? 0),
-    volume: Number(d.total_volume ?? d.total ?? d.perpVolume ?? 0),
+  const heatmapData = topAssets.map((a) => ({
+    name: a.name,
+    value: a.price_change_pct ?? 0,
+    size: a.open_interest_usd ?? 0,
   }));
-
-  // OI distribution for chart (backend returns {assets: [{asset, oi_usd, oi_pct}], total_oi_usd})
-  const oiDistData = oiDist as AnyRecord | undefined;
-  const oiAssets = ((oiDistData?.assets ?? oiDist ?? []) as AnyRecord[]).slice(0, 10);
-
-  // Funding rates (top 20)
-  const fundingData = ((fundingRates ?? []) as AnyRecord[]).slice(0, 20);
 
   return (
     <PageContainer>
-      {/* KPI Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KPICard
-          label="Total Open Interest"
-          value={k?.total_open_interest ? formatUSD(Number(k.total_open_interest)) : undefined}
-          isLoading={kpisLoading}
-          sparklineData={sparkOI}
-        />
-        <KPICard
-          label="24h Volume"
-          value={k?.total_volume_24h ? formatUSD(Number(k.total_volume_24h)) : undefined}
-          isLoading={kpisLoading}
-          sparklineData={sparkVol}
-        />
-        <KPICard
-          label="HYPE Price"
-          value={k?.hype_price ? formatUSD(Number(k.hype_price)) : '$-'}
-          isLoading={kpisLoading}
-          sparklineData={sparkHype}
-          change={k?.hype_change_24h ? Number(k.hype_change_24h) : undefined}
-        />
-        <KPICard
-          label="TVL"
-          value={k?.tvl ? formatUSD(Number(k.tvl)) : undefined}
-          isLoading={kpisLoading}
-        />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Volume Chart */}
-        <div className="card p-4">
-          <h3 className="text-text-primary font-semibold text-sm mb-1">24h Volume History</h3>
-          <p className="text-text-tertiary text-xs mb-3">Total perp trading volume over time</p>
-          <AreaChartComponent
-            data={volChartData}
-            series={[{ key: 'volume', name: 'Volume', color: CHART_COLORS.cyan }]}
-            isLoading={volLoading}
-            height={200}
-            valueFormatter={(v) => formatUSD(v)}
-          />
-        </div>
-
-        {/* OI Distribution */}
-        <div className="card p-4">
-          <h3 className="text-text-primary font-semibold text-sm mb-1">Open Interest Distribution</h3>
-          <p className="text-text-tertiary text-xs mb-3">Top assets by OI</p>
-          {oiLoading ? (
-            <div className="h-[200px] animate-pulse bg-bg-card rounded-xl" />
-          ) : oiAssets.length > 0 ? (
-            <div className="space-y-2">
-              {oiAssets.map((a, i) => {
-                const pct = Number(a.oi_pct ?? a.percentage ?? 0);
-                const val = Number(a.oi_usd ?? a.openInterestUsd ?? 0);
-                return (
-                  <div key={String(a.asset ?? a.coin ?? i)} className="flex items-center gap-3">
-                    <span className="text-text-secondary text-xs w-12 shrink-0">{String(a.asset ?? a.coin ?? '')}</span>
-                    <div className="flex-1 h-5 bg-bg-tertiary rounded-sm overflow-hidden relative">
-                      <div
-                        className="h-full rounded-sm"
-                        style={{
-                          width: `${Math.max(pct, 1)}%`,
-                          background: `linear-gradient(90deg, ${CHART_COLORS.cyan}88, ${CHART_COLORS.cyan}44)`,
-                        }}
-                      />
-                    </div>
-                    <span className="number text-xs text-text-secondary w-20 text-right">{formatUSD(val)}</span>
-                    <span className="number text-xs text-text-muted w-12 text-right">{pct.toFixed(1)}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-[200px] text-text-muted text-sm">No OI data available</div>
-          )}
-        </div>
-      </div>
-
-      {/* Funding Rates Table */}
-      <SectionHeader title="Funding Rates" subtitle="Current 8h funding rates for top assets" />
-      <DataTable
-        columns={FUNDING_COLUMNS}
-        data={fundingData}
-        isLoading={fundLoading}
-        rowKey={(r) => String(r.asset ?? r.coin ?? Math.random())}
-        skeletonRows={10}
-      />
-
-      {/* Heatmap */}
-      <SectionHeader title="Market Heatmap" subtitle="24h price change — sorted by volume" />
-      <HeatMap data={heatmap ?? []} isLoading={heatmapLoading} />
-
-      {/* Large Trades */}
       <SectionHeader
-        title="Large Trades"
-        subtitle="Real-time feed of trades > $10k"
+        title="Overview"
+        subtitle="hyperliquid · live market intelligence"
       />
-      <DataTable
-        columns={TRADE_COLUMNS}
-        data={trades}
-        isLoading={tradesLoading}
-        rowKey={(t) => `${t.time}-${t.coin}-${t.price}`}
-        emptyMessage="Waiting for large trades..."
-        skeletonRows={6}
-      />
+
+      {/* Global KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {snapshot.total_oi != null && (
+          <KPICard
+            label="Total OI"
+            value={fmt.usd(snapshot.total_oi)}
+            sub={`${fmt.num(snapshot.num_assets ?? 0)} assets`}
+          />
+        )}
+        {snapshot.total_volume_24h != null && (
+          <KPICard
+            label="24h Volume"
+            value={fmt.usd(snapshot.total_volume_24h)}
+          />
+        )}
+        {fearGreed && (
+          <KPICard
+            label="Fear & Greed"
+            value={String(fearGreed.value ?? '—')}
+            sub={fearGreed.label}
+          />
+        )}
+        {hypePrice && (
+          <KPICard
+            label="HYPE"
+            value={fmt.price(hypePrice.price)}
+            sub={`mkt cap ${fmt.compact(hypePrice.market_cap ?? 0)}`}
+          />
+        )}
+      </div>
+
+      {/* Secondary KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        {tvl && (
+          <KPICard label="TVL" value={fmt.usd(tvl.tvl)} />
+        )}
+        {fees && (
+          <KPICard label="24h Fees" value={fmt.usd(fees.fees_24h)} />
+        )}
+        {globalOI && (
+          <KPICard label="Global OI" value={fmt.usd(globalOI.total_oi)} />
+        )}
+        {liquidations && (
+          <KPICard
+            label="24h Liquidations"
+            value={fmt.usd((liquidations.long_24h ?? 0) + (liquidations.short_24h ?? 0))}
+          />
+        )}
+      </div>
+
+      {/* Heat Map */}
+      {heatmapData.length > 0 && (
+        <div className="card mb-6">
+          <h3 className="text-xs font-mono text-white/40 mb-3">price change heatmap (24h)</h3>
+          <HeatMap data={heatmapData} />
+        </div>
+      )}
+
+      {/* Asset Table */}
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm font-mono">
+          <thead>
+            <tr className="border-b border-white/5">
+              {['Asset', 'Mark Price', 'OI', '24h Vol', 'Funding', '24h %'].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="px-3 py-2 text-left text-white/30 font-normal"
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {topAssets.map((asset) => (
+              <tr
+                key={asset.name}
+                className="border-b border-white/5 hover:bg-white/2 cursor-pointer"
+              >
+                <td className="px-3 py-2">
+                  <Link
+                    href={`/markets/${asset.name}`}
+                    className="text-neon-green font-semibold hover:underline"
+                  >
+                    {asset.name}
+                  </Link>
+                </td>
+                <td className="px-3 py-2 text-white/80">
+                  {fmt.price(asset.mark_price)}
+                </td>
+                <td className="px-3 py-2 text-white/60">
+                  {fmt.usd(asset.open_interest_usd)}
+                </td>
+                <td className="px-3 py-2 text-white/60">
+                  {fmt.usd(asset.day_volume)}
+                </td>
+                <td className="px-3 py-2 text-white/40 text-xs">
+                  {asset.funding != null
+                    ? `${(asset.funding * 100).toFixed(4)}%`
+                    : '—'}
+                </td>
+                <td
+                  className={`px-3 py-2 text-xs ${
+                    (asset.price_change_pct ?? 0) >= 0
+                      ? 'text-neon-green'
+                      : 'text-red-400'
+                  }`}
+                >
+                  {asset.price_change_pct != null
+                    ? `${asset.price_change_pct >= 0 ? '+' : ''}${asset.price_change_pct.toFixed(2)}%`
+                    : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </PageContainer>
   );
 }

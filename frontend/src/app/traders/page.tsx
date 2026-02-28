@@ -1,135 +1,120 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
-import { DataTable, type Column } from '@/components/ui/DataTable';
-import { AddressSearch } from '@/components/traders/AddressSearch';
-import { useLeaderboard, useTraderDistribution } from '@/hooks/useAPI';
-import { formatUSD, formatAddress } from '@/lib/format';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { useLeaderboard } from '@/hooks/useHyperscope';
+import { PageContainer, SectionHeader } from '@/components/ui/PageLayout';
+import { fmt } from '@/lib/format';
 import Link from 'next/link';
-import { ComparisonBar } from '@/components/charts/ComparisonBar';
-
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
-}
-
-type AnyRecord = Record<string, unknown>;
 
 export default function TradersPage() {
-  const router = useRouter();
-  const { data: leaderboardRaw, isLoading } = useLeaderboard(undefined, 100);
-  const { data: distributionRaw, isLoading: distLoading } = useTraderDistribution();
+  const { data, isLoading, error } = useLeaderboard();
+  const [sort, setSort] = useState<'pnl' | 'volume' | 'win_rate'>('pnl');
 
-  const leaderboard = (leaderboardRaw ?? []) as AnyRecord[];
-  const distribution = (distributionRaw ?? []) as AnyRecord[];
+  if (isLoading)
+    return (
+      <PageContainer>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-neon-green animate-pulse font-mono text-sm">
+            loading leaderboard...
+          </div>
+        </div>
+      </PageContainer>
+    );
 
-  const columns: Column<AnyRecord>[] = [
-    {
-      key: 'rank',
-      header: '#',
-      render: (v) => (
-        <span className={cn(
-          'number font-bold text-sm',
-          Number(v) === 1 ? 'text-accent-yellow' : Number(v) <= 3 ? 'text-accent-cyan' : 'text-text-muted'
-        )}>
-          {Number(v) === 1 ? '🥇' : Number(v) === 2 ? '🥈' : Number(v) === 3 ? '🥉' : `#${v}`}
-        </span>
-      ),
-    },
-    {
-      key: 'address',
-      header: 'Address',
-      render: (v) => (
-        <Link
-          href={`/traders/${String(v)}`}
-          className="number text-accent-cyan hover:underline"
-        >
-          {formatAddress(String(v))}
-        </Link>
-      ),
-    },
-    {
-      key: 'account_value',
-      header: 'Account Value',
-      align: 'right',
-      sortable: true,
-      render: (v) => <span className="number font-semibold">{formatUSD(Number(v))}</span>,
-    },
-    {
-      key: 'unrealized_pnl',
-      header: 'Unrealized PnL',
-      align: 'right',
-      sortable: true,
-      render: (v) => {
-        const n = Number(v);
-        return (
-          <span className={cn('number', n >= 0 ? 'text-accent-green' : 'text-accent-red')}>
-            {n >= 0 ? '+' : ''}{formatUSD(n)}
-          </span>
-        );
-      },
-    },
-    {
-      key: 'total_margin_used',
-      header: 'Margin Used',
-      align: 'right',
-      sortable: true,
-      render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
-    },
-    {
-      key: 'position_count',
-      header: 'Positions',
-      align: 'right',
-      render: (v) => <span className="number">{String(v)}</span>,
-    },
-  ];
+  if (error || !data)
+    return (
+      <PageContainer>
+        <div className="text-red-400 font-mono text-sm">
+          error loading leaderboard
+        </div>
+      </PageContainer>
+    );
+
+  type Trader = {
+    address: string;
+    pnl: number;
+    volume: number;
+    win_rate: number;
+    num_trades: number;
+  };
+
+  const traders: Trader[] = [...(data.traders ?? [])];
+  traders.sort((a, b) => (b[sort] ?? 0) - (a[sort] ?? 0));
 
   return (
     <PageContainer>
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <SectionHeader
-          title="Trader Leaderboard"
-          subtitle="Top accounts by value"
-        />
-        <AddressSearch onSearch={(addr) => router.push(`/traders/${addr}`)} />
-      </div>
-
-      <DataTable
-        columns={columns}
-        data={leaderboard}
-        isLoading={isLoading}
-        onRowClick={(row) => router.push(`/traders/${String(row.address)}`)}
-        rowKey={(r) => String(r.address)}
-        skeletonRows={20}
+      <SectionHeader
+        title="Traders"
+        subtitle="leaderboard · top performers"
       />
 
-      {distribution.length > 0 && (
-        <>
-          <SectionHeader
-            title="Account Distribution"
-            subtitle="Account size brackets"
-            className="mt-6"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {distribution.map((d, i) => (
-              <div key={String(d.bracket ?? d.range ?? i)} className="card p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-text-secondary text-sm">{String(d.bracket ?? d.range ?? `Tier ${i + 1}`)}</span>
-                  <span className="number text-text-primary">{Number(d.count ?? 0).toLocaleString()} accounts</span>
-                </div>
-                <ComparisonBar
-                  value={Number(d.count ?? 0)}
-                  max={Math.max(...distribution.map((x) => Number(x.count ?? 0)), 1)}
-                  color="#00D1FF"
-                />
-              </div>
+      {/* Sort controls */}
+      <div className="flex gap-2 mb-4">
+        {(['pnl', 'volume', 'win_rate'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSort(s)}
+            className={`px-3 py-1.5 text-xs font-mono rounded border transition-colors ${
+              sort === s
+                ? 'border-neon-green text-neon-green bg-neon-green/5'
+                : 'border-white/10 text-white/40 hover:border-white/20'
+            }`}
+          >
+            {s.replace('_', ' ')}
+          </button>
+        ))}
+      </div>
+
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm font-mono">
+          <thead>
+            <tr className="border-b border-white/5">
+              {['#', 'Address', 'PnL', 'Volume', 'Win Rate', 'Trades'].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="px-3 py-2 text-left text-white/30 font-normal"
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {traders.map((trader, i) => (
+              <tr
+                key={trader.address}
+                className="border-b border-white/5 hover:bg-white/2 cursor-pointer"
+              >
+                <td className="px-3 py-2 text-white/30">{i + 1}</td>
+                <td className="px-3 py-2">
+                  <Link
+                    href={`/traders/${trader.address}`}
+                    className="text-neon-green hover:underline"
+                  >
+                    {trader.address.slice(0, 8)}...{trader.address.slice(-6)}
+                  </Link>
+                </td>
+                <td
+                  className={`px-3 py-2 ${
+                    (trader.pnl ?? 0) >= 0 ? 'text-neon-green' : 'text-red-400'
+                  }`}
+                >
+                  {fmt.usd(trader.pnl)}
+                </td>
+                <td className="px-3 py-2 text-white/60">{fmt.usd(trader.volume)}</td>
+                <td className="px-3 py-2 text-white/60">
+                  {trader.win_rate != null
+                    ? `${(trader.win_rate * 100).toFixed(1)}%`
+                    : '—'}
+                </td>
+                <td className="px-3 py-2 text-white/40">{trader.num_trades}</td>
+              </tr>
             ))}
-          </div>
-        </>
-      )}
+          </tbody>
+        </table>
+      </div>
     </PageContainer>
   );
 }

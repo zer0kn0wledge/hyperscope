@@ -1,195 +1,98 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import {
-  createChart,
-  type IChartApi,
-  type ISeriesApi,
-  type CandlestickData,
-  type Time,
-  ColorType,
-  CrosshairMode,
-} from 'lightweight-charts';
-import { CHART_COLORS } from '@/lib/constants';
-import type { CandleData } from '@/lib/types';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { createChart, ColorType, type IChartApi, type ISeriesApi, type CandlestickSeriesOptions } from 'lightweight-charts';
 
-interface PriceChartProps {
-  data: CandleData[];
-  isLoading?: boolean;
-  height?: number;
-  showVolume?: boolean;
+interface Candle {
+  t: number;   // timestamp ms
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
 }
 
-export function PriceChart({
-  data,
-  isLoading,
-  height = 400,
-  showVolume = true,
-}: PriceChartProps) {
+interface Props {
+  candles: Candle[];
+}
+
+export function PriceChart({ candles }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-  const [crosshairData, setCrosshairData] = useState<{
-    time?: string;
-    open?: number;
-    high?: number;
-    low?: number;
-    close?: number;
-    volume?: number;
-  } | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  // Initialize chart
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!mounted || !containerRef.current) return;
+
+    // Destroy previous chart
+    if (chartRef.current) {
+      chartRef.current.remove();
+      chartRef.current = null;
+    }
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
-      height: showVolume ? height - 80 : height,
+      height: 320,
       layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: CHART_COLORS.text,
-        fontFamily: 'JetBrains Mono, monospace',
-        fontSize: 11,
+        background: { type: ColorType.Solid, color: '#111111' },
+        textColor: 'rgba(255,255,255,0.4)',
       },
       grid: {
-        vertLines: { color: CHART_COLORS.grid, style: 0 },
-        horzLines: { color: CHART_COLORS.grid, style: 0 },
+        vertLines: { color: 'rgba(255,255,255,0.04)' },
+        horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: {
-          color: 'rgba(0, 209, 255, 0.4)',
-          width: 1,
-          style: 3,
-          labelBackgroundColor: '#0A0F1A',
-        },
-        horzLine: {
-          color: 'rgba(0, 209, 255, 0.4)',
-          width: 1,
-          style: 3,
-          labelBackgroundColor: '#0A0F1A',
-        },
-      },
-      timeScale: {
-        borderColor: CHART_COLORS.grid,
-        timeVisible: true,
-        secondsVisible: false,
-      },
-      rightPriceScale: {
-        borderColor: CHART_COLORS.grid,
-        scaleMargins: { top: 0.1, bottom: showVolume ? 0.25 : 0.1 },
-      },
+      crosshair: { mode: 1 },
+      rightPriceScale: { borderColor: 'transparent' },
+      timeScale: { borderColor: 'transparent', timeVisible: true },
     });
+
+    const series = chart.addCandlestickSeries({
+      upColor: '#00ff88',
+      downColor: '#ff4d4d',
+      borderUpColor: '#00ff88',
+      borderDownColor: '#ff4d4d',
+      wickUpColor: '#00ff88',
+      wickDownColor: '#ff4d4d',
+    } as Partial<CandlestickSeriesOptions>);
+
+    const formatted = candles
+      .map((c) => ({
+        time: Math.floor(c.t / 1000) as unknown as import('lightweight-charts').Time,
+        open: c.o,
+        high: c.h,
+        low: c.l,
+        close: c.c,
+      }))
+      .sort((a, b) => (a.time as number) - (b.time as number));
+
+    series.setData(formatted);
+    chart.timeScale().fitContent();
 
     chartRef.current = chart;
+    seriesRef.current = series;
 
-    // Candlestick series
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: CHART_COLORS.cyan,
-      downColor: CHART_COLORS.red,
-      borderUpColor: CHART_COLORS.cyan,
-      borderDownColor: CHART_COLORS.red,
-      wickUpColor: CHART_COLORS.cyan,
-      wickDownColor: CHART_COLORS.red,
-    });
-    candleSeriesRef.current = candleSeries;
-
-    // Volume series
-    if (showVolume) {
-      const volumeSeries = chart.addHistogramSeries({
-        color: 'rgba(0, 209, 255, 0.3)',
-        priceFormat: { type: 'volume' },
-        priceScaleId: 'volume',
-      });
-      chart.priceScale('volume').applyOptions({
-        scaleMargins: { top: 0.8, bottom: 0 },
-      });
-      volumeSeriesRef.current = volumeSeries;
-    }
-
-    // Crosshair subscription
-    chart.subscribeCrosshairMove((param) => {
-      if (!param.time) {
-        setCrosshairData(null);
-        return;
-      }
-      const candle = param.seriesData.get(candleSeries) as CandlestickData | undefined;
-      if (candle) {
-        setCrosshairData({
-          time: new Date(Number(param.time) * 1000).toLocaleDateString(),
-          open: candle.open,
-          high: candle.high,
-          low: candle.low,
-          close: candle.close,
+    const handleResize = () => {
+      if (containerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
+          width: containerRef.current.clientWidth,
         });
       }
-    });
-
-    // Resize observer
-    const observer = new ResizeObserver(() => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
-      }
-    });
-    observer.observe(containerRef.current);
-
-    return () => {
-      observer.disconnect();
-      chart.remove();
-      chartRef.current = null;
     };
-  }, [height, showVolume]);
-
-  // Update data
-  useEffect(() => {
-    if (!data || !candleSeriesRef.current) return;
-
-    const candleData: CandlestickData[] = data.map((d) => ({
-      time: (d.time / 1000) as Time,
-      open: d.open,
-      high: d.high,
-      low: d.low,
-      close: d.close,
-    }));
-
-    candleSeriesRef.current.setData(candleData);
-
-    if (volumeSeriesRef.current) {
-      const volumeData = data.map((d) => ({
-        time: (d.time / 1000) as Time,
-        value: d.volume,
-        color: d.close >= d.open
-          ? 'rgba(0, 209, 255, 0.3)'
-          : 'rgba(255, 77, 106, 0.3)',
-      }));
-      volumeSeriesRef.current.setData(volumeData);
-    }
-
-    chartRef.current?.timeScale().fitContent();
-  }, [data]);
-
-  if (isLoading) {
-    return <Skeleton className="rounded-xl" style={{ height }} />;
-  }
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+    };
+  }, [mounted, candles]);
 
   return (
-    <div className="relative">
-      {/* Crosshair OHLC display */}
-      {crosshairData && (
-        <div className="absolute top-2 left-2 z-10 flex gap-3 text-xs number bg-bg-elevated/80 px-2 py-1 rounded border border-border-subtle">
-          {crosshairData.open !== undefined && (
-            <>
-              <span className="text-text-tertiary">O <span className="text-text-secondary">{crosshairData.open?.toFixed(2)}</span></span>
-              <span className="text-text-tertiary">H <span className="text-accent-green">{crosshairData.high?.toFixed(2)}</span></span>
-              <span className="text-text-tertiary">L <span className="text-accent-red">{crosshairData.low?.toFixed(2)}</span></span>
-              <span className="text-text-tertiary">C <span className="text-text-primary">{crosshairData.close?.toFixed(2)}</span></span>
-            </>
-          )}
-        </div>
-      )}
-      <div ref={containerRef} className="w-full" />
-    </div>
+    <div
+      ref={containerRef}
+      style={{ minHeight: 320 }}
+      className="w-full rounded"
+    />
   );
 }

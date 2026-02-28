@@ -5,98 +5,67 @@ import {
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   Cell,
-  ReferenceLine,
 } from 'recharts';
-import { CHART_COLORS } from '@/lib/constants';
-import { formatUSD, formatDate } from '@/lib/format';
-import type { FundingHistoryEntry } from '@/lib/types';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { useFundingHistory } from '@/hooks/useHyperscope';
 
-interface FundingChartProps {
-  data: FundingHistoryEntry[];
-  isLoading?: boolean;
-  height?: number;
-  annualized?: boolean;
+interface Props {
+  asset: string;
+  interval?: string;
 }
 
-function CustomTooltip({ active, payload, label, annualized }: {
-  active?: boolean;
-  payload?: Array<{ value: number }>;
-  label?: number;
-  annualized?: boolean;
-}) {
-  if (!active || !payload?.length) return null;
-  const rate = payload[0].value;
-  const displayRate = annualized ? rate * 3 * 365 * 100 : rate * 100;
-  return (
-    <div className="bg-bg-elevated border border-border-subtle rounded-lg px-3 py-2 text-xs font-mono shadow-card">
-      <div className="text-text-secondary mb-1">
-        {label ? formatDate(label) : ''}
-      </div>
-      <div className={rate >= 0 ? 'text-accent-orange' : 'text-accent-cyan'}>
-        Rate: {rate >= 0 ? '+' : ''}{displayRate.toFixed(4)}%
-        {annualized && ' (ann.)'}
-      </div>
-    </div>
-  );
-}
+const NEON = '#00ff88';
+const RED = '#ff4d4d';
 
-export function FundingChart({ data, isLoading, height = 220, annualized = false }: FundingChartProps) {
-  if (isLoading) return <Skeleton className="rounded-xl" style={{ height }} />;
-  if (!data?.length) {
+export function FundingChart({ asset, interval = '1d' }: Props) {
+  const { data = [], isLoading } = useFundingHistory(asset, interval);
+
+  if (isLoading)
     return (
-      <div className="flex items-center justify-center text-text-muted text-sm" style={{ height }}>
-        No funding data available
+      <div className="h-48 flex items-center justify-center text-neon-green/40 font-mono text-xs">
+        loading...
       </div>
     );
-  }
 
-  const chartData = data.map((d) => {
-    const raw = d as unknown as Record<string, unknown>;
-    return {
-      time: Number(raw.time ?? raw.timestamp ?? 0),
-      rate: Number(raw.fundingRate ?? raw.funding_rate ?? raw.rate ?? 0),
-    };
-  });
+  const chartData = data.map((d: { time: number; funding: number }) => ({
+    name: new Date(d.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    value: d.funding * 100, // to pct
+  }));
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={chartData} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
-        <CartesianGrid
-          strokeDasharray="3 3"
-          stroke={CHART_COLORS.grid}
-          vertical={false}
-          strokeOpacity={0.5}
-        />
+    <ResponsiveContainer width="100%" height={192}>
+      <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 4, left: 0 }}>
         <XAxis
-          dataKey="time"
-          tickFormatter={(v: number) => formatDate(v, { short: true })}
-          tick={{ fill: CHART_COLORS.text, fontSize: 10 }}
+          dataKey="name"
+          tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontFamily: 'monospace' }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
-          tickFormatter={(v: number) => {
-            const pct = annualized ? v * 3 * 365 * 100 : v * 100;
-            return `${pct.toFixed(3)}%`;
-          }}
-          tick={{ fill: CHART_COLORS.text, fontSize: 10 }}
+          tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontFamily: 'monospace' }}
           axisLine={false}
           tickLine={false}
-          width={60}
+          tickFormatter={(v) => `${v.toFixed(3)}%`}
         />
-        <Tooltip content={<CustomTooltip annualized={annualized} />} />
-        <ReferenceLine y={0} stroke={CHART_COLORS.grid} strokeWidth={1} />
-        <Bar dataKey="rate" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-          {chartData.map((entry, i) => (
+        <Tooltip
+          contentStyle={{
+            background: '#111',
+            border: '1px solid rgba(0,255,136,0.2)',
+            borderRadius: 4,
+            fontSize: 11,
+            fontFamily: 'monospace',
+            color: '#e0e0e0',
+          }}
+          formatter={(val: number) => [`${val.toFixed(4)}%`, 'Funding']}
+        />
+        <Bar dataKey="value" radius={[2, 2, 0, 0]}>
+          {chartData.map((entry, index) => (
             <Cell
-              key={i}
-              fill={entry.rate >= 0 ? CHART_COLORS.orange : CHART_COLORS.cyan}
-              fillOpacity={0.85}
+              key={`cell-${index}`}
+              fill={entry.value >= 0 ? NEON : RED}
+              fillOpacity={0.8}
             />
           ))}
         </Bar>

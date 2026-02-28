@@ -1,178 +1,101 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
-import { PriceChart } from '@/components/charts/PriceChart';
-import { FundingChart } from '@/components/charts/FundingChart';
-import { VolumeChart } from '@/components/charts/VolumeChart';
-import { Select } from '@/components/ui/Select';
-import { DataTable, type Column } from '@/components/ui/DataTable';
-import { Badge } from '@/components/ui/Badge';
+import { useParams } from 'next/navigation';
+import { useMarketAsset } from '@/hooks/useHyperscope';
+import { PageContainer, SectionHeader } from '@/components/ui/PageLayout';
 import { KPICard } from '@/components/ui/KPICard';
-import {
-  useAssetCandles,
-  useAssetFundingHistory,
-  useAssetLiquidations,
-  useFundingRates,
-} from '@/hooks/useAPI';
-import { useAssetTradesWS } from '@/hooks/useWebSocket';
-import { formatUSD, formatPrice, formatPercent, formatDate } from '@/lib/format';
-import { TOP_PAIRS, TIMEFRAME_OPTIONS } from '@/lib/constants';
-
-type AnyRecord = Record<string, unknown>;
-
-const ASSET_OPTIONS = TOP_PAIRS.map((p) => ({ value: p, label: p }));
-
-const LIQ_COLUMNS: Column<AnyRecord>[] = [
-  {
-    key: 'side',
-    header: 'Side',
-    render: (v) => (
-      <Badge variant={String(v) === 'long' ? 'buy' : 'sell'}>
-        {String(v).toUpperCase()}
-      </Badge>
-    ),
-  },
-  {
-    key: 'price',
-    header: 'Price',
-    align: 'right',
-    render: (v) => <span className="number">${formatPrice(Number(v))}</span>,
-  },
-  {
-    key: 'size',
-    header: 'Size',
-    align: 'right',
-    render: (v) => <span className="number">{Number(v).toFixed(4)}</span>,
-  },
-  {
-    key: 'notional',
-    header: 'Notional',
-    align: 'right',
-    render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
-  },
-  {
-    key: 'time',
-    header: 'Time',
-    align: 'right',
-    render: (v) => (
-      <span className="number text-text-secondary">{formatDate(Number(v))}</span>
-    ),
-  },
-];
+import { PriceChart } from '@/components/charts/PriceChart';
+import { VolumeChart } from '@/components/charts/VolumeChart';
+import { FundingChart } from '@/components/charts/FundingChart';
+import { fmt } from '@/lib/format';
 
 export default function AssetPage() {
-  const params = useParams();
-  const router = useRouter();
-  const asset = String(params.asset ?? 'BTC');
-  const [timeframe, setTimeframe] = useState('1h');
+  const { asset } = useParams<{ asset: string }>();
+  const { data, isLoading, error } = useMarketAsset(asset);
+  const [tab, setTab] = useState<'price' | 'volume' | 'funding'>('price');
 
-  const { data: candles, isLoading: candlesLoading } = useAssetCandles(
-    asset,
-    timeframe
-  );
-  const { data: funding, isLoading: fundingLoading } =
-    useAssetFundingHistory(asset);
-  const { data: liquidations, isLoading: liqLoading } =
-    useAssetLiquidations(asset);
-  const { data: allRates } = useFundingRates();
+  if (isLoading)
+    return (
+      <PageContainer>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-neon-green animate-pulse font-mono text-sm">
+            loading {asset}...
+          </div>
+        </div>
+      </PageContainer>
+    );
 
-  // Find current rate - backend returns snake_case with asset or coin field
-  const rates = (allRates ?? []) as AnyRecord[];
-  const currentRate = rates.find((r) => String(r.asset ?? r.coin) === asset);
-  const trades = useAssetTradesWS(asset);
+  if (error || !data)
+    return (
+      <PageContainer>
+        <div className="text-red-400 font-mono text-sm">error loading {asset}</div>
+      </PageContainer>
+    );
+
+  const asset_data = data.asset ?? {};
+  const candles = data.candles ?? [];
 
   return (
     <PageContainer>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/markets"
-            className="p-1.5 rounded-md hover:bg-bg-hover transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4 text-text-secondary" />
-          </Link>
-          <div>
-            <h1 className="text-lg font-semibold text-text-primary">
-              {asset}-PERP
-            </h1>
-            {currentRate && (
-              <p className="text-sm text-text-secondary">
-                Mark: ${formatPrice(Number(currentRate.mark_px ?? currentRate.mark_price ?? 0))} &nbsp;·&nbsp;
-                FR:{' '}
-                <span
-                  className={
-                    Number(currentRate.funding_rate ?? 0) >= 0
-                      ? 'text-accent-green'
-                      : 'text-accent-red'
-                  }
-                >
-                  {formatPercent(Number(currentRate.funding_rate ?? 0), 4)}
-                </span>
-              </p>
-            )}
-          </div>
-        </div>
-        <Select
-          options={TIMEFRAME_OPTIONS}
-          value={timeframe}
-          onChange={setTimeframe}
+      <SectionHeader
+        title={asset}
+        subtitle={`market data · open interest · funding · volume`}
+      />
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <KPICard
+          label="Mark Price"
+          value={fmt.price(asset_data.mark_price)}
+        />
+        <KPICard
+          label="Open Interest"
+          value={fmt.usd(asset_data.open_interest_usd)}
+        />
+        <KPICard
+          label="24h Volume"
+          value={fmt.usd(asset_data.day_volume)}
+        />
+        <KPICard
+          label="Funding Rate"
+          value={
+            asset_data.funding != null
+              ? `${(asset_data.funding * 100).toFixed(4)}%`
+              : '—'
+          }
+          highlight={asset_data.funding != null && Math.abs(asset_data.funding) > 0.0005}
         />
       </div>
 
-      {/* KPI Row */}
-      {currentRate && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard
-            label="Open Interest"
-            value={formatUSD(Number(currentRate.oi_usd ?? currentRate.open_interest ?? 0))}
-          />
-          <KPICard
-            label="24h Volume"
-            value={formatUSD(Number(currentRate.volume_24h ?? 0))}
-          />
-          <KPICard
-            label="Funding Rate"
-            value={formatPercent(Number(currentRate.funding_rate ?? 0), 4)}
-          />
-          <KPICard
-            label="24h Change"
-            value={formatPercent(Number(currentRate.price_change_24h ?? 0))}
-          />
-        </div>
-      )}
+      {/* Tab switcher */}
+      <div className="flex gap-2 mb-4">
+        {(['price', 'volume', 'funding'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-3 py-1.5 text-xs font-mono rounded border transition-colors ${
+              tab === t
+                ? 'border-neon-green text-neon-green bg-neon-green/5'
+                : 'border-white/10 text-white/40 hover:border-white/20'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
 
-      {/* Price Chart */}
-      <SectionHeader title="Price" subtitle={`${asset} OHLCV — ${timeframe}`} />
-      <PriceChart data={(candles ?? []) as AnyRecord[]} isLoading={candlesLoading} />
-
-      {/* Funding History */}
-      <SectionHeader
-        title="Funding Rate History"
-        subtitle="8-hour funding payments"
-      />
-      <FundingChart data={(funding ?? []) as AnyRecord[]} isLoading={fundingLoading} />
-
-      {/* Volume */}
-      <SectionHeader title="Volume" subtitle="Per-candle trading volume" />
-      <VolumeChart data={(candles ?? []) as AnyRecord[]} isLoading={candlesLoading} />
-
-      {/* Liquidations */}
-      <SectionHeader
-        title="Recent Liquidations"
-        subtitle="Forced liquidations for this asset"
-      />
-      <DataTable
-        columns={LIQ_COLUMNS}
-        data={(liquidations ?? []) as AnyRecord[]}
-        isLoading={liqLoading}
-        rowKey={(l) => `${l.time}-${l.price}`}
-        skeletonRows={8}
-      />
+      <div className="card">
+        {tab === 'price' && <PriceChart candles={candles} />}
+        {tab === 'volume' && (
+          <VolumeChart
+            data={candles.map((c: { t: number; v: number }) => ({
+              name: new Date(c.t).toLocaleDateString(),
+              value: c.v,
+            }))}
+          />
+        )}
+        {tab === 'funding' && <FundingChart asset={asset} />}
+      </div>
     </PageContainer>
   );
 }

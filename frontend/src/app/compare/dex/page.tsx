@@ -1,222 +1,161 @@
 'use client';
 
-import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
-import { DataTable, type Column } from '@/components/ui/DataTable';
-import { ComparisonBar } from '@/components/charts/ComparisonBar';
-import { Badge } from '@/components/ui/Badge';
-import { Tooltip, InfoIcon } from '@/components/ui/Tooltip';
-import {
-  useDEXSnapshot,
-  useDEXFundingRates,
-} from '@/hooks/useAPI';
-import { formatUSD, formatFunding, fundingClass } from '@/lib/format';
-import { DEX_EXCHANGES } from '@/lib/constants';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
-}
-
-// Backend returns snake_case: { exchange, volume_24h, open_interest, pairs_count, btc_funding_rate, source, rank }
-type DEXRow = Record<string, unknown>;
-
-const SNAPSHOT_COLUMNS: Column<DEXRow>[] = [
-  {
-    key: 'exchange',
-    header: 'Exchange',
-    render: (v) => {
-      const name = String(v);
-      const exc = DEX_EXCHANGES.find((e) => e.name === name);
-      return (
-        <div className="flex items-center gap-2">
-          <span
-            className="w-2.5 h-2.5 rounded-full shrink-0"
-            style={{ background: exc?.color ?? '#8B949E' }}
-          />
-          <span className="font-semibold">{name}</span>
-        </div>
-      );
-    },
-  },
-  {
-    key: 'volume_24h',
-    header: '24h Volume',
-    sortable: true,
-    align: 'right',
-    render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
-  },
-  {
-    key: 'open_interest',
-    header: 'Open Interest',
-    sortable: true,
-    align: 'right',
-    render: (v) => <span className="number text-text-secondary">{formatUSD(Number(v))}</span>,
-  },
-  {
-    key: 'pairs_count',
-    header: '# Pairs',
-    sortable: true,
-    align: 'right',
-    render: (v) => <span className="number">{String(v)}</span>,
-  },
-  {
-    key: 'btc_funding_rate',
-    header: 'BTC Funding',
-    align: 'right',
-    render: (v) => {
-      const val = Number(v);
-      if (!val) return <span className="text-text-muted">—</span>;
-      return <span className={cn('number', fundingClass(val))}>{formatFunding(val)}</span>;
-    },
-  },
-  {
-    key: 'source',
-    header: 'Source',
-    render: (v) => (
-      <Badge variant={String(v) === 'direct' ? 'buy' : 'neutral'}>
-        {String(v).toUpperCase()}
-      </Badge>
-    ),
-  },
-];
-
-type FundingRow = Record<string, unknown>;
-
-const FUNDING_COLUMNS: Column<FundingRow>[] = [
-  {
-    key: 'coin',
-    header: 'Asset',
-    render: (v) => <span className="font-medium">{String(v)}-PERP</span>,
-  },
-  {
-    key: 'hyperliquid',
-    header: 'Hyperliquid',
-    align: 'right',
-    render: (v) => v != null ? <span className={cn('number', fundingClass(Number(v)))}>{formatFunding(Number(v))}</span> : <span className="text-text-muted">—</span>,
-  },
-  {
-    key: 'paradex',
-    header: 'Paradex',
-    align: 'right',
-    render: (v) => v != null ? <span className={cn('number', fundingClass(Number(v)))}>{formatFunding(Number(v))}</span> : <span className="text-text-muted">—</span>,
-  },
-  {
-    key: 'lighter',
-    header: 'Lighter',
-    align: 'right',
-    render: (v) => v != null ? <span className={cn('number', fundingClass(Number(v)))}>{formatFunding(Number(v))}</span> : <span className="text-text-muted">—</span>,
-  },
-  {
-    key: 'aster',
-    header: 'Aster',
-    align: 'right',
-    render: (v) => v != null ? <span className={cn('number', fundingClass(Number(v)))}>{formatFunding(Number(v))}</span> : <span className="text-text-muted">—</span>,
-  },
-  {
-    key: 'grvt',
-    header: 'GRVT',
-    align: 'right',
-    render: (v) => v != null ? <span className={cn('number', fundingClass(Number(v)))}>{formatFunding(Number(v))}</span> : <span className="text-text-muted">—</span>,
-  },
-];
+import { PageContainer, SectionHeader } from '@/components/ui/PageLayout';
+import { useDEXCompare } from '@/hooks/useHyperscope';
+import { KPICard } from '@/components/ui/KPICard';
+import { PieChart } from '@/components/charts/PieChart';
+import { VolumeChart } from '@/components/charts/VolumeChart';
+import { fmt } from '@/lib/format';
 
 export default function DEXComparePage() {
-  const { data: rawSnapshot, isLoading: snapLoading } = useDEXSnapshot();
-  const { data: rawFunding, isLoading: fundLoading } = useDEXFundingRates();
+  const { data, isLoading, error } = useDEXCompare();
 
-  // Backend returns { exchanges: [...] }
-  const snapshot = (rawSnapshot as unknown as { exchanges?: DEXRow[] })?.exchanges ?? (rawSnapshot as DEXRow[] | undefined) ?? [];
-
-  // Backend returns { symbol, rates: [{exchange, funding_rate, ...}], timestamp }
-  // Transform into a table: one row per exchange with the funding rate
-  const fundingRows: FundingRow[] = (() => {
-    if (!rawFunding) return [];
-    const raw = rawFunding as unknown as { rates?: Array<Record<string, unknown>>; symbol?: string };
-    if (Array.isArray(rawFunding)) return rawFunding as FundingRow[];
-    if (raw.rates && Array.isArray(raw.rates)) {
-      return raw.rates.map((r) => ({
-        exchange: r.exchange ?? '',
-        funding_rate: r.funding_rate ?? 0,
-        funding_rate_annual_pct: r.funding_rate_annual_pct ?? 0,
-        interval_hours: r.interval_hours ?? 8,
-      } as FundingRow));
-    }
-    return [];
-  })();
-
-  // Funding rate columns for per-exchange table
-  const EXCHANGE_FUNDING_COLS: Column<FundingRow>[] = [
-    {
-      key: 'exchange',
-      header: 'Exchange',
-      render: (v) => {
-        const name = String(v);
-        const exc = DEX_EXCHANGES.find((e) => e.name.toLowerCase() === name.toLowerCase());
-        return (
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: exc?.color ?? '#8B949E' }} />
-            <span className="font-semibold">{name}</span>
+  if (isLoading)
+    return (
+      <PageContainer>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-neon-green animate-pulse font-mono text-sm">
+            fetching DEX data...
           </div>
-        );
-      },
-    },
-    {
-      key: 'funding_rate',
-      header: 'Funding Rate (8h)',
-      align: 'right',
-      sortable: true,
-      render: (v) => {
-        const val = Number(v);
-        if (!isFinite(val)) return <span className="text-text-muted">—</span>;
-        return <span className={cn('number', fundingClass(val))}>{formatFunding(val)}</span>;
-      },
-    },
-    {
-      key: 'funding_rate_annual_pct',
-      header: 'Annualized',
-      align: 'right',
-      render: (v) => {
-        const val = Number(v);
-        if (!isFinite(val)) return <span className="text-text-muted">—</span>;
-        const sign = val > 0 ? '+' : '';
-        return <span className={cn('number', val > 0 ? 'text-accent-orange' : val < 0 ? 'text-accent-cyan' : 'text-text-secondary')}>{sign}{val.toFixed(2)}%</span>;
-      },
-    },
-  ];
+        </div>
+      </PageContainer>
+    );
+
+  if (error || !data)
+    return (
+      <PageContainer>
+        <div className="text-red-400 font-mono text-sm">
+          error loading DEX compare data
+        </div>
+      </PageContainer>
+    );
+
+  type ExchangeData = {
+    oi?: number;
+    volume_24h?: number;
+    num_markets?: number;
+    num_traders?: number;
+    funding_rate?: number;
+  };
+
+  const exchanges = data as Record<string, ExchangeData>;
+  const rows = Object.entries(exchanges).map(([name, d]) => ({
+    name,
+    ...d,
+  }));
+
+  rows.sort((a, b) => (b.oi ?? 0) - (a.oi ?? 0));
+
+  const oiPie = rows
+    .filter((r) => r.oi)
+    .map((r) => ({ name: r.name, value: r.oi as number }));
+
+  const volPie = rows
+    .filter((r) => r.volume_24h)
+    .map((r) => ({ name: r.name, value: r.volume_24h as number }));
+
+  // Totals
+  const totalOI = rows.reduce((s, r) => s + (r.oi ?? 0), 0);
+  const totalVol = rows.reduce((s, r) => s + (r.volume_24h ?? 0), 0);
+  const totalMarkets = rows.reduce((s, r) => s + (r.num_markets ?? 0), 0);
+  const totalTraders = rows.reduce((s, r) => s + (r.num_traders ?? 0), 0);
+
+  const volHistory = rows
+    .filter((r) => r.volume_24h != null)
+    .map((r) => ({
+      name: r.name.replace('_', ' '),
+      value: r.volume_24h as number,
+    }));
 
   return (
     <PageContainer>
       <SectionHeader
-        title="DEX Market Share"
-        subtitle="Hyperliquid vs Paradex, Lighter, Aster, GRVT, EdgeX, Extended, Variational"
+        title="DEX Compare"
+        subtitle="On-chain perpetual exchanges — head-to-head metrics"
       />
 
-      <DataTable
-        columns={SNAPSHOT_COLUMNS}
-        data={snapshot}
-        isLoading={snapLoading}
-        rowKey={(r) => String(r.exchange)}
-        skeletonRows={8}
-      />
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <KPICard label="Total OI" value={fmt.usd(totalOI)} />
+        <KPICard label="24h Volume" value={fmt.usd(totalVol)} />
+        <KPICard label="Total Markets" value={fmt.num(totalMarkets)} />
+        <KPICard label="Total Traders" value={fmt.num(totalTraders)} />
+      </div>
 
-      <SectionHeader
-        title="Funding Rate Comparison"
-        subtitle={<><span>BTC funding rates across exchanges</span><Tooltip content="Funding rates are updated every 8 hours. Positive = longs pay shorts."><InfoIcon /></Tooltip></>}
-      />
-      {fundingRows.length > 0 ? (
-        <DataTable
-          columns={EXCHANGE_FUNDING_COLS}
-          data={fundingRows}
-          isLoading={fundLoading}
-          rowKey={(r) => String(r.exchange)}
-          skeletonRows={8}
-        />
-      ) : !fundLoading ? (
-        <div className="card p-6 text-center text-text-muted text-sm">
-          No funding rate data available for this symbol. CoinGlass may not track all DEXes.
+      {/* Table */}
+      <div className="card mb-6 overflow-x-auto">
+        <table className="w-full text-sm font-mono">
+          <thead>
+            <tr className="border-b border-white/5">
+              {[
+                'Exchange',
+                'Open Interest',
+                '24h Volume',
+                'Markets',
+                'Traders',
+                'Funding',
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="px-3 py-2 text-left text-white/40 font-normal"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.name}
+                className="border-b border-white/5 hover:bg-white/2"
+              >
+                <td className="px-3 py-2 text-neon-green font-semibold capitalize">
+                  {row.name.replace(/_/g, ' ')}
+                </td>
+                <td className="px-3 py-2 text-white/80">{fmt.usd(row.oi)}</td>
+                <td className="px-3 py-2 text-white/80">
+                  {fmt.usd(row.volume_24h)}
+                </td>
+                <td className="px-3 py-2 text-white/60">
+                  {row.num_markets ?? '—'}
+                </td>
+                <td className="px-3 py-2 text-white/60">
+                  {row.num_traders != null ? fmt.num(row.num_traders) : '—'}
+                </td>
+                <td className="px-3 py-2 text-white/60">
+                  {row.funding_rate != null
+                    ? `${(row.funding_rate * 100).toFixed(4)}%`
+                    : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Charts */}
+      <div className="grid md:grid-cols-2 gap-4 mb-4">
+        {oiPie.length > 0 && (
+          <div className="card">
+            <h3 className="text-sm font-mono text-white/40 mb-3">OI Distribution</h3>
+            <PieChart data={oiPie} />
+          </div>
+        )}
+        {volPie.length > 0 && (
+          <div className="card">
+            <h3 className="text-sm font-mono text-white/40 mb-3">Volume Distribution</h3>
+            <PieChart data={volPie} />
+          </div>
+        )}
+      </div>
+
+      {volHistory.length > 0 && (
+        <div className="card">
+          <h3 className="text-sm font-mono text-white/40 mb-3">24h Volume Comparison</h3>
+          <VolumeChart data={volHistory} />
         </div>
-      ) : null}
+      )}
     </PageContainer>
   );
 }

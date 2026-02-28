@@ -1,119 +1,51 @@
 'use client';
 
-import { getHeatmapColor } from '@/lib/constants';
-import { formatUSD, formatPercent } from '@/lib/format';
-import type { HeatmapAsset } from '@/lib/types';
-import { Skeleton } from '@/components/ui/Skeleton';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-import Link from 'next/link';
+import { getHeatmapColor } from '@/lib/format';
 
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
+interface HeatMapItem {
+  name: string;
+  value: number; // price_change_pct
+  size: number;  // oi usd
 }
 
-interface HeatMapProps {
-  data: HeatmapAsset[];
-  isLoading?: boolean;
+interface Props {
+  data: HeatMapItem[];
 }
 
-function getOpacity(volume: number, maxVolume: number): number {
-  if (maxVolume === 0) return 0.5;
-  const ratio = volume / maxVolume;
-  // Use log scale for better visual distribution
-  const logRatio = Math.log10(ratio * 1000 + 1) / Math.log10(1001);
-  return Math.max(0.4, Math.min(1.0, 0.4 + logRatio * 0.6));
-}
+export function HeatMap({ data }: Props) {
+  if (!data.length) return null;
 
-export function HeatMap({ data, isLoading }: HeatMapProps) {
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 xl:grid-cols-10 gap-1.5">
-        {Array.from({ length: 30 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 rounded-lg" />
-        ))}
-      </div>
-    );
-  }
-
-  if (!data?.length) {
-    return (
-      <div className="text-center text-text-muted text-sm py-10">
-        No market data available
-      </div>
-    );
-  }
-
-  // Backend returns snake_case fields: change_pct, volume_24h, oi_usd
-  const vol = (d: Record<string, unknown>) => Number(d.volume_24h ?? d.volume24h ?? 0);
-  const chg = (d: Record<string, unknown>) => Number(d.change_pct ?? d.priceChange24h ?? 0);
-  const oi = (d: Record<string, unknown>) => Number(d.oi_usd ?? d.openInterest ?? 0);
-  const price = (d: Record<string, unknown>) => Number(d.mark_px ?? d.markPx ?? 0);
-
-  // Filter out assets with zero volume for cleaner display, keep top 150
-  const filtered = [...data]
-    .filter((d) => vol(d as unknown as Record<string, unknown>) > 0)
-    .sort((a, b) =>
-      vol(b as unknown as Record<string, unknown>) - vol(a as unknown as Record<string, unknown>)
-    )
-    .slice(0, 150);
-
-  const maxVolume = Math.max(...filtered.map((d) => vol(d as unknown as Record<string, unknown>)));
+  const maxSize = Math.max(...data.map((d) => d.size), 1);
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 xl:grid-cols-10 2xl:grid-cols-12 gap-1.5">
-      {filtered.map((asset) => {
-        const raw = asset as unknown as Record<string, unknown>;
-        const change = chg(raw);
-        const volume = vol(raw);
-        const openInterest = oi(raw);
-        const markPrice = price(raw);
-        const bgColor = getHeatmapColor(change);
-        const opacity = getOpacity(volume, maxVolume);
-
+    <div className="flex flex-wrap gap-1.5">
+      {data.map((item) => {
+        const bgColor = getHeatmapColor(item.value);
+        // Scale tile size based on OI (min 60px, max 140px)
+        const w = 60 + (item.size / maxSize) * 80;
         return (
-          <Link
-            key={asset.asset}
-            href={`/markets/${asset.asset}`}
-            className={cn(
-              'relative rounded-lg p-2 flex flex-col justify-between',
-              'border border-transparent hover:border-white/20 transition-all duration-200',
-              'cursor-pointer min-h-[60px] overflow-hidden group'
-            )}
-            style={{ backgroundColor: bgColor, opacity }}
+          <div
+            key={item.name}
+            style={{
+              backgroundColor: bgColor,
+              width: `${w}px`,
+              minHeight: '56px',
+            }}
+            className="rounded flex flex-col items-center justify-center p-1 cursor-pointer hover:opacity-90 transition-opacity"
           >
-            <div className="text-white text-xs font-bold tracking-wide">
-              {asset.asset}
-            </div>
-            <div className="space-y-0.5">
-              <div className="text-white text-xs font-bold number leading-tight">
-                {formatPercent(change)}
-              </div>
-              <div className="text-white/70 text-[9px] number leading-tight">
-                {formatUSD(volume)}
-              </div>
-            </div>
-            {/* Hover tooltip */}
-            <div className="absolute inset-0 bg-bg-elevated/95 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-lg flex flex-col justify-center p-2 z-10">
-              <div className="text-text-primary text-xs font-bold">{asset.asset}</div>
-              <div className={cn('text-xs number font-medium mt-0.5',
-                change >= 0 ? 'text-accent-cyan' : 'text-accent-red'
-              )}>
-                {formatPercent(change)}
-              </div>
-              {markPrice > 0 && (
-                <div className="text-text-tertiary text-[10px] mt-0.5">
-                  Price: ${markPrice >= 1 ? markPrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) : markPrice.toFixed(6)}
-                </div>
-              )}
-              <div className="text-text-tertiary text-[10px]">
-                Vol: {formatUSD(volume)}
-              </div>
-              <div className="text-text-tertiary text-[10px]">
-                OI: {formatUSD(openInterest)}
-              </div>
-            </div>
-          </Link>
+            <span className="text-xs font-mono font-semibold text-white">
+              {item.name}
+            </span>
+            <span
+              className="text-xs font-mono"
+              style={{
+                color: item.value >= 0 ? '#00ff88' : '#ff4d4d',
+              }}
+            >
+              {item.value >= 0 ? '+' : ''}
+              {item.value.toFixed(2)}%
+            </span>
+          </div>
         );
       })}
     </div>
