@@ -123,10 +123,67 @@ const FUNDING_COLUMNS: Column<FundingRow>[] = [
 
 export default function DEXComparePage() {
   const { data: rawSnapshot, isLoading: snapLoading } = useDEXSnapshot();
-  const { data: funding, isLoading: fundLoading } = useDEXFundingRates();
+  const { data: rawFunding, isLoading: fundLoading } = useDEXFundingRates();
 
   // Backend returns { exchanges: [...] }
   const snapshot = (rawSnapshot as unknown as { exchanges?: DEXRow[] })?.exchanges ?? (rawSnapshot as DEXRow[] | undefined) ?? [];
+
+  // Backend returns { symbol, rates: [{exchange, funding_rate, ...}], timestamp }
+  // Transform into a table: one row per exchange with the funding rate
+  const fundingRows: FundingRow[] = (() => {
+    if (!rawFunding) return [];
+    const raw = rawFunding as unknown as { rates?: Array<Record<string, unknown>>; symbol?: string };
+    if (Array.isArray(rawFunding)) return rawFunding as FundingRow[];
+    if (raw.rates && Array.isArray(raw.rates)) {
+      return raw.rates.map((r) => ({
+        exchange: r.exchange ?? '',
+        funding_rate: r.funding_rate ?? 0,
+        funding_rate_annual_pct: r.funding_rate_annual_pct ?? 0,
+        interval_hours: r.interval_hours ?? 8,
+      } as FundingRow));
+    }
+    return [];
+  })();
+
+  // Funding rate columns for per-exchange table
+  const EXCHANGE_FUNDING_COLS: Column<FundingRow>[] = [
+    {
+      key: 'exchange',
+      header: 'Exchange',
+      render: (v) => {
+        const name = String(v);
+        const exc = DEX_EXCHANGES.find((e) => e.name.toLowerCase() === name.toLowerCase());
+        return (
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: exc?.color ?? '#8B949E' }} />
+            <span className="font-semibold">{name}</span>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'funding_rate',
+      header: 'Funding Rate (8h)',
+      align: 'right',
+      sortable: true,
+      render: (v) => {
+        const val = Number(v);
+        if (!isFinite(val)) return <span className="text-text-muted">—</span>;
+        return <span className={cn('number', fundingClass(val))}>{formatFunding(val)}</span>;
+      },
+    },
+    {
+      key: 'funding_rate_annual_pct',
+      header: 'Annualized',
+      align: 'right',
+      render: (v) => {
+        const val = Number(v);
+        if (!isFinite(val)) return <span className="text-text-muted">—</span>;
+        const sign = val > 0 ? '+' : '';
+        return <span className={cn('number', val > 0 ? 'text-accent-orange' : val < 0 ? 'text-accent-cyan' : 'text-text-secondary')}>{sign}{val.toFixed(2)}%</span>;
+      },
+    },
+  ];
 
   return (
     <PageContainer>
@@ -145,15 +202,21 @@ export default function DEXComparePage() {
 
       <SectionHeader
         title="Funding Rate Comparison"
-        subtitle={<><span>8h funding rates across DEXes</span><Tooltip content="Funding rates are updated every 8 hours. Positive = longs pay shorts."><InfoIcon /></Tooltip></>}
+        subtitle={<><span>BTC funding rates across exchanges</span><Tooltip content="Funding rates are updated every 8 hours. Positive = longs pay shorts."><InfoIcon /></Tooltip></>}
       />
-      <DataTable
-        columns={FUNDING_COLUMNS}
-        data={(funding ?? []) as FundingRow[]}
-        isLoading={fundLoading}
-        rowKey={(r) => String(r.coin)}
-        skeletonRows={10}
-      />
+      {fundingRows.length > 0 ? (
+        <DataTable
+          columns={EXCHANGE_FUNDING_COLS}
+          data={fundingRows}
+          isLoading={fundLoading}
+          rowKey={(r) => String(r.exchange)}
+          skeletonRows={8}
+        />
+      ) : !fundLoading ? (
+        <div className="card p-6 text-center text-text-muted text-sm">
+          No funding rate data available for this symbol. CoinGlass may not track all DEXes.
+        </div>
+      ) : null}
     </PageContainer>
   );
 }

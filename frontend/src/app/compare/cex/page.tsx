@@ -26,14 +26,15 @@ const SNAPSHOT_COLUMNS: Column<CEXRow>[] = [
     header: 'Exchange',
     render: (v) => {
       const name = String(v);
-      const exc = CEX_EXCHANGES.find((e) => e.name === name);
+      const exc = CEX_EXCHANGES.find((e) => e.name.toLowerCase() === name.toLowerCase());
+      const displayName = exc?.name ?? name;
       return (
         <div className="flex items-center gap-2">
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{ background: exc?.color ?? '#8B949E' }}
           />
-          <span className="font-semibold">{name}</span>
+          <span className="font-semibold">{displayName}</span>
           {exc?.isDex && <Badge variant="neutral">DEX</Badge>}
         </div>
       );
