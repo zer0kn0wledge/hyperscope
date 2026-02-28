@@ -72,6 +72,7 @@ class MarketService:
         # Process perp market snapshot
         if isinstance(meta_result, list) and len(meta_result) == 2:
             meta, asset_ctxs = meta_result
+            universe = meta.get("universe", [])
             for ctx in asset_ctxs:
                 if ctx is None:
                     continue
@@ -84,24 +85,23 @@ class MarketService:
                 except (TypeError, ValueError):
                     pass
 
-            # Also extract HYPE price from perp market if not found in spot
-            if result["hype_price"] == 0.0:
-                for i_h, asset_info_h in enumerate(universe):
-                    if asset_info_h.get("name") == "HYPE" and i_h < len(asset_ctxs):
-                        ctx_h = asset_ctxs[i_h]
-                        if ctx_h:
-                            mark_px_h = ctx_h.get("markPx")
-                            prev_px_h = ctx_h.get("prevDayPx")
-                            if mark_px_h:
-                                result["hype_price"] = float(mark_px_h)
-                            if mark_px_h and prev_px_h:
-                                try:
-                                    result["hype_change_24h"] = (
-                                        (float(mark_px_h) - float(prev_px_h)) / float(prev_px_h) * 100
-                                    )
-                                except (ZeroDivisionError, TypeError):
-                                    pass
-                        break
+            # Also extract HYPE price from perp market
+            for i_h, asset_info_h in enumerate(universe):
+                if asset_info_h.get("name") == "HYPE" and i_h < len(asset_ctxs):
+                    ctx_h = asset_ctxs[i_h]
+                    if ctx_h:
+                        mark_px_h = ctx_h.get("markPx")
+                        prev_px_h = ctx_h.get("prevDayPx")
+                        if mark_px_h:
+                            result["hype_price"] = float(mark_px_h)
+                        if mark_px_h and prev_px_h:
+                            try:
+                                result["hype_change_24h"] = (
+                                    (float(mark_px_h) - float(prev_px_h)) / float(prev_px_h) * 100
+                                )
+                            except (ZeroDivisionError, TypeError):
+                                pass
+                    break
 
         # Extract HYPE price from spot markets
         if isinstance(spot_result, list) and len(spot_result) == 2:
