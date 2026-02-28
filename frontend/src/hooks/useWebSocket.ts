@@ -152,6 +152,8 @@ function getWSManager(): WebSocketManager {
     wsManagerInstance = new WebSocketManager(
       `${WS_URL}/ws`
     );
+    // Note: WS_URL is the base URL (e.g. wss://backend.railway.app)
+    // The hub endpoint is at /ws (router prefix) + "" (hub path) = /ws
   }
   return wsManagerInstance;
 }

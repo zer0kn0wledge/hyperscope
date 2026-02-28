@@ -3,16 +3,13 @@
 import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { ComparisonBar } from '@/components/charts/ComparisonBar';
-import { AreaChartComponent } from '@/components/charts/AreaChart';
+import { Badge } from '@/components/ui/Badge';
 import { Tooltip, InfoIcon } from '@/components/ui/Tooltip';
 import {
   useDEXSnapshot,
-  useDEXVolumeHistory,
-  useDEXOIHistory,
   useDEXFundingRates,
 } from '@/hooks/useAPI';
 import { formatUSD, formatFunding, fundingClass } from '@/lib/format';
-import type { DEXSnapshot, FundingRateComparison } from '@/lib/types';
 import { DEX_EXCHANGES } from '@/lib/constants';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -21,54 +18,72 @@ function cn(...classes: (string | undefined | null | boolean)[]) {
   return twMerge(clsx(classes));
 }
 
-const SNAPSHOT_COLUMNS: Column<DEXSnapshot>[] = [
+// Backend returns snake_case: { exchange, volume_24h, open_interest, pairs_count, btc_funding_rate, source, rank }
+type DEXRow = Record<string, unknown>;
+
+const SNAPSHOT_COLUMNS: Column<DEXRow>[] = [
   {
-    key: 'name',
+    key: 'exchange',
     header: 'Exchange',
     render: (v) => {
-      const exc = DEX_EXCHANGES.find((e) => e.name === String(v));
+      const name = String(v);
+      const exc = DEX_EXCHANGES.find((e) => e.name === name);
       return (
         <div className="flex items-center gap-2">
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{ background: exc?.color ?? '#8B949E' }}
           />
-          <span className="font-semibold">{String(v)}</span>
+          <span className="font-semibold">{name}</span>
         </div>
       );
     },
   },
   {
-    key: 'volume24h',
+    key: 'volume_24h',
     header: '24h Volume',
     sortable: true,
     align: 'right',
     render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
   },
   {
-    key: 'openInterest',
+    key: 'open_interest',
     header: 'Open Interest',
     sortable: true,
     align: 'right',
     render: (v) => <span className="number text-text-secondary">{formatUSD(Number(v))}</span>,
   },
   {
-    key: 'pairsCount',
+    key: 'pairs_count',
     header: '# Pairs',
     sortable: true,
     align: 'right',
     render: (v) => <span className="number">{String(v)}</span>,
   },
   {
-    key: 'volume24h',
-    header: 'Volume Share',
-    render: (v, row) => {
-      return <div className="w-32"><ComparisonBar value={Number(v)} max={Number((row as DEXSnapshot).volume24h) * 2} color="#00D1FF" /></div>;
+    key: 'btc_funding_rate',
+    header: 'BTC Funding',
+    align: 'right',
+    render: (v) => {
+      const val = Number(v);
+      if (!val) return <span className="text-text-muted">—</span>;
+      return <span className={cn('number', fundingClass(val))}>{formatFunding(val)}</span>;
     },
+  },
+  {
+    key: 'source',
+    header: 'Source',
+    render: (v) => (
+      <Badge variant={String(v) === 'direct' ? 'buy' : 'neutral'}>
+        {String(v).toUpperCase()}
+      </Badge>
+    ),
   },
 ];
 
-const FUNDING_COLUMNS: Column<FundingRateComparison>[] = [
+type FundingRow = Record<string, unknown>;
+
+const FUNDING_COLUMNS: Column<FundingRow>[] = [
   {
     key: 'coin',
     header: 'Asset',
@@ -78,7 +93,7 @@ const FUNDING_COLUMNS: Column<FundingRateComparison>[] = [
     key: 'hyperliquid',
     header: 'Hyperliquid',
     align: 'right',
-    render: (v) => <span className={cn('number', fundingClass(Number(v)))}>{formatFunding(Number(v))}</span>,
+    render: (v) => v != null ? <span className={cn('number', fundingClass(Number(v)))}>{formatFunding(Number(v))}</span> : <span className="text-text-muted">—</span>,
   },
   {
     key: 'paradex',
@@ -107,10 +122,11 @@ const FUNDING_COLUMNS: Column<FundingRateComparison>[] = [
 ];
 
 export default function DEXComparePage() {
-  const { data: snapshot, isLoading: snapLoading } = useDEXSnapshot();
-  const { data: volumeHistory, isLoading: volLoading } = useDEXVolumeHistory();
-  const { data: oiHistory, isLoading: oiLoading } = useDEXOIHistory();
+  const { data: rawSnapshot, isLoading: snapLoading } = useDEXSnapshot();
   const { data: funding, isLoading: fundLoading } = useDEXFundingRates();
+
+  // Backend returns { exchanges: [...] }
+  const snapshot = (rawSnapshot as unknown as { exchanges?: DEXRow[] })?.exchanges ?? (rawSnapshot as DEXRow[] | undefined) ?? [];
 
   return (
     <PageContainer>
@@ -121,32 +137,10 @@ export default function DEXComparePage() {
 
       <DataTable
         columns={SNAPSHOT_COLUMNS}
-        data={snapshot ?? []}
+        data={snapshot}
         isLoading={snapLoading}
-        rowKey={(r) => r.name}
+        rowKey={(r) => String(r.exchange)}
         skeletonRows={8}
-      />
-
-      <SectionHeader title="Volume History" subtitle="30-day volume comparison" />
-      <AreaChartComponent
-        data={volumeHistory ?? []}
-        lines={DEX_EXCHANGES.map((e) => ({ key: e.key, color: e.color, label: e.name }))}
-        xKey="time"
-        isLoading={volLoading}
-        formatY={(v) => formatUSD(v)}
-        formatX={(v) => new Date(v).toLocaleDateString()}
-        multiLine
-      />
-
-      <SectionHeader title="Open Interest History" subtitle="30-day OI comparison" />
-      <AreaChartComponent
-        data={oiHistory ?? []}
-        lines={DEX_EXCHANGES.map((e) => ({ key: e.key, color: e.color, label: e.name }))}
-        xKey="time"
-        isLoading={oiLoading}
-        formatY={(v) => formatUSD(v)}
-        formatX={(v) => new Date(v).toLocaleDateString()}
-        multiLine
       />
 
       <SectionHeader
@@ -155,9 +149,9 @@ export default function DEXComparePage() {
       />
       <DataTable
         columns={FUNDING_COLUMNS}
-        data={funding ?? []}
+        data={(funding ?? []) as FundingRow[]}
         isLoading={fundLoading}
-        rowKey={(r) => r.coin}
+        rowKey={(r) => String(r.coin)}
         skeletonRows={10}
       />
     </PageContainer>

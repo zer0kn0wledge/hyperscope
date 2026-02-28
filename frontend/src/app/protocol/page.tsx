@@ -3,9 +3,6 @@
 import { useState } from 'react';
 import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
 import { KPICard } from '@/components/ui/KPICard';
-import { AreaChartComponent } from '@/components/charts/AreaChart';
-import { VolumeChart } from '@/components/charts/VolumeChart';
-import { PieChartComponent } from '@/components/charts/PieChart';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Tabs } from '@/components/ui/Tabs';
 import { Badge } from '@/components/ui/Badge';
@@ -13,16 +10,14 @@ import { Tooltip, InfoIcon } from '@/components/ui/Tooltip';
 import { useFees, useRevenue, useAF, useHLP, useStaking, useHypeToken } from '@/hooks/useAPI';
 import {
   formatUSD,
-  formatNumber,
   formatPercent,
   formatAddress,
   formatDate,
+  formatNumber,
   formatTokenAmount,
-  formatPrice,
 } from '@/lib/format';
-import { CHART_COLORS, AF_ADDRESS, HLP_ADDRESS } from '@/lib/constants';
-import type { ValidatorEntry } from '@/lib/types';
-import { ExternalLink, Shield, Zap, TrendingUp, Coins, Vote } from 'lucide-react';
+import { AF_ADDRESS, HLP_ADDRESS } from '@/lib/constants';
+import { ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { clsx } from 'clsx';
@@ -51,26 +46,42 @@ function AddressLink({ address }: { address: string }) {
   );
 }
 
+type AnyRecord = Record<string, unknown>;
+
 export default function ProtocolPage() {
   const [feePeriod, setFeePeriod] = useState('30d');
 
-  const { data: fees, isLoading: feesLoading } = useFees(feePeriod);
-  const { data: revenue, isLoading: revLoading } = useRevenue();
-  const { data: af, isLoading: afLoading } = useAF();
-  const { data: hlp, isLoading: hlpLoading } = useHLP();
-  const { data: staking, isLoading: stakingLoading } = useStaking();
-  const { data: hype, isLoading: hypeLoading } = useHypeToken();
+  const { data: feesRaw, isLoading: feesLoading } = useFees(feePeriod);
+  const { data: revenueRaw, isLoading: revLoading } = useRevenue();
+  const { data: afRaw, isLoading: afLoading } = useAF();
+  const { data: hlpRaw, isLoading: hlpLoading } = useHLP();
+  const { data: stakingRaw, isLoading: stakingLoading } = useStaking();
+  const { data: hypeRaw, isLoading: hypeLoading } = useHypeToken();
 
-  const VALIDATOR_COLUMNS: Column<ValidatorEntry>[] = [
+  // Cast to loose record type for snake_case field access
+  const fees = feesRaw as AnyRecord | undefined;
+  const revenue = revenueRaw as AnyRecord | undefined;
+  const af = afRaw as AnyRecord | undefined;
+  const hlp = hlpRaw as AnyRecord | undefined;
+  const staking = stakingRaw as AnyRecord | undefined;
+  const hype = hypeRaw as AnyRecord | undefined;
+
+  const afShare = revenue?.af_share as AnyRecord | undefined;
+  const hlpShare = revenue?.hlp_share as AnyRecord | undefined;
+
+  // Staking validators
+  const validators = (staking?.validators as AnyRecord[]) ?? [];
+
+  const VALIDATOR_COLUMNS: Column<AnyRecord>[] = [
     {
       key: 'name',
       header: 'Validator',
-      render: (v) => <span className="font-medium">{String(v)}</span>,
+      render: (v) => <span className="font-medium">{String(v ?? 'Unknown')}</span>,
     },
     {
       key: 'validator',
       header: 'Address',
-      render: (v) => <AddressLink address={String(v)} />,
+      render: (v) => v ? <AddressLink address={String(v)} /> : <span className="text-text-muted">—</span>,
     },
     {
       key: 'stake',
@@ -84,16 +95,6 @@ export default function ProtocolPage() {
       header: 'Commission',
       align: 'right',
       render: (v) => <span className="number">{formatPercent(Number(v))}</span>,
-    },
-    {
-      key: 'uptime',
-      header: 'Uptime',
-      align: 'right',
-      render: (v) => (
-        <span className={cn('number', Number(v) >= 99 ? 'text-accent-green' : Number(v) >= 95 ? 'text-accent-yellow' : 'text-accent-red')}>
-          {formatPercent(Number(v))}
-        </span>
-      ),
     },
     {
       key: 'is_jailed',
@@ -111,10 +112,10 @@ export default function ProtocolPage() {
         <>
           <SectionHeader title="HYPE Token" subtitle="Native token metrics" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KPICard label="HYPE Price" value={hype.price} format="usd" precision={4} isLoading={hypeLoading} />
-            <KPICard label="Market Cap" value={hype.market_cap} format="usd" isLoading={hypeLoading} />
-            <KPICard label="24h Volume" value={hype.volume_24h} format="usd" isLoading={hypeLoading} />
-            <KPICard label="Circulating Supply" value={hype.circulating_supply} format="number" isLoading={hypeLoading} />
+            <KPICard label="HYPE Price" value={hype.price ? formatUSD(Number(hype.price)) : undefined} isLoading={hypeLoading} />
+            <KPICard label="Market Cap" value={hype.market_cap ? formatUSD(Number(hype.market_cap)) : undefined} isLoading={hypeLoading} />
+            <KPICard label="24h Volume" value={hype.volume_24h ? formatUSD(Number(hype.volume_24h)) : undefined} isLoading={hypeLoading} />
+            <KPICard label="Circulating Supply" value={hype.circulating_supply ? formatNumber(Number(hype.circulating_supply)) : undefined} isLoading={hypeLoading} />
           </div>
         </>
       )}
@@ -125,27 +126,65 @@ export default function ProtocolPage() {
         <Skeleton className="h-40 rounded-lg" />
       ) : revenue ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPICard label="Total Revenue" value={revenue.total} format="usd" />
-          <KPICard label="24h Revenue" value={revenue.daily} format="usd" trend={revenue.daily_change} />
-          <KPICard label="7d Revenue" value={revenue.weekly} format="usd" />
-          <KPICard label="30d Revenue" value={revenue.monthly} format="usd" />
+          <KPICard label="All-Time Revenue" value={formatUSD(Number(revenue.total_all_time ?? 0))} />
+          <KPICard label="24h Revenue" value={formatUSD(Number(revenue.total_24h ?? 0))} />
+          <KPICard label="7d Revenue" value={formatUSD(Number(revenue.total_7d ?? 0))} />
+          <KPICard label="30d Revenue" value={formatUSD(Number(revenue.total_30d ?? 0))} />
         </div>
       ) : null}
 
-      {/* Fee Breakdown Chart */}
-      <SectionHeader title="Fee Revenue" subtitle="Trading fees over time" />
+      {/* Revenue Split */}
+      {afShare && hlpShare && (
+        <>
+          <SectionHeader title="Revenue Split" subtitle="Assistance Fund vs HLP" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="card p-4 space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-accent-cyan" />
+                <span className="font-semibold text-sm">Assistance Fund ({formatPercent(Number(afShare.fraction ?? 0) * 100)})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-secondary text-sm">24h</span>
+                <span className="number">{formatUSD(Number(afShare.revenue_24h ?? 0))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-secondary text-sm">All-Time</span>
+                <span className="number">{formatUSD(Number(afShare.revenue_all_time ?? 0))}</span>
+              </div>
+            </div>
+            <div className="card p-4 space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-accent-green" />
+                <span className="font-semibold text-sm">HLP ({formatPercent(Number(hlpShare.fraction ?? 0) * 100)})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-secondary text-sm">24h</span>
+                <span className="number">{formatUSD(Number(hlpShare.revenue_24h ?? 0))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-secondary text-sm">All-Time</span>
+                <span className="number">{formatUSD(Number(hlpShare.revenue_all_time ?? 0))}</span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Fee Info */}
+      <SectionHeader title="Trading Fees" subtitle="Fee revenue breakdown" />
       <div className="flex justify-end mb-2">
         <Tabs tabs={FEE_TABS} activeTab={feePeriod} onTabChange={setFeePeriod} size="sm" />
       </div>
-      <AreaChartComponent
-        data={fees?.history ?? []}
-        dataKey="fees"
-        xKey="time"
-        color="#00D1FF"
-        isLoading={feesLoading}
-        formatY={(v) => formatUSD(v)}
-        formatX={(v) => formatDate(v, 'date')}
-      />
+      {feesLoading ? (
+        <Skeleton className="h-32 rounded-lg" />
+      ) : fees ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KPICard label="24h Fees" value={formatUSD(Number(fees.total_24h ?? 0))} />
+          <KPICard label="7d Fees" value={formatUSD(Number(fees.total_7d ?? 0))} />
+          <KPICard label="30d Fees" value={formatUSD(Number(fees.total_30d ?? 0))} />
+          <KPICard label="All-Time Fees" value={formatUSD(Number(fees.total_all_time ?? 0))} />
+        </div>
+      ) : null}
 
       {/* AF + HLP */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -167,18 +206,12 @@ export default function ProtocolPage() {
           ) : af ? (
             <div className="card p-4 space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-text-secondary text-sm">Total Value</span>
-                <span className="number font-semibold text-text-primary">{formatUSD(af.total_value)}</span>
+                <span className="text-text-secondary text-sm">HYPE Balance</span>
+                <span className="number font-semibold text-text-primary">{formatTokenAmount(Number(af.hype_balance ?? 0))} HYPE</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-text-secondary text-sm">Liquidation Coverage</span>
-                <span className="number text-accent-cyan">{formatUSD(af.liquidation_coverage)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-text-secondary text-sm">30d P&L</span>
-                <span className={cn('number', af.pnl_30d >= 0 ? 'text-accent-green' : 'text-accent-red')}>
-                  {af.pnl_30d >= 0 ? '+' : ''}{formatUSD(af.pnl_30d)}
-                </span>
+                <span className="text-text-secondary text-sm">USDC Balance</span>
+                <span className="number text-accent-cyan">{formatUSD(Number(af.usdc_balance ?? 0))}</span>
               </div>
             </div>
           ) : null}
@@ -202,18 +235,16 @@ export default function ProtocolPage() {
           ) : hlp ? (
             <div className="card p-4 space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-text-secondary text-sm">Total Value</span>
-                <span className="number font-semibold text-text-primary">{formatUSD(hlp.total_value)}</span>
+                <span className="text-text-secondary text-sm">TVL</span>
+                <span className="number font-semibold text-text-primary">{formatUSD(Number(hlp.tvl ?? 0))}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-text-secondary text-sm">APY</span>
-                <span className="number text-accent-green">{formatPercent(hlp.apy)}</span>
+                <span className="text-text-secondary text-sm">APR</span>
+                <span className="number text-accent-green">{formatPercent(Number(hlp.apr ?? 0) * 100)}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-text-secondary text-sm">30d P&L</span>
-                <span className={cn('number', hlp.pnl_30d >= 0 ? 'text-accent-green' : 'text-accent-red')}>
-                  {hlp.pnl_30d >= 0 ? '+' : ''}{formatUSD(hlp.pnl_30d)}
-                </span>
+                <span className="text-text-secondary text-sm">Depositors</span>
+                <span className="number">{formatNumber(Number(hlp.depositor_count ?? 0))}</span>
               </div>
             </div>
           ) : null}
@@ -227,15 +258,15 @@ export default function ProtocolPage() {
       ) : staking ? (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-            <KPICard label="Total Staked" value={staking.total_staked} format="number" />
-            <KPICard label="Validators" value={staking.validator_count} format="number" />
-            <KPICard label="Active Validators" value={staking.active_count} format="number" />
-            <KPICard label="Staking APY" value={staking.staking_apy} format="percent" />
+            <KPICard label="Total Staked" value={formatTokenAmount(Number(staking.total_staked ?? 0))} />
+            <KPICard label="Validators" value={String(staking.validator_count ?? 0)} />
+            <KPICard label="Active" value={String(staking.active_count ?? 0)} />
+            <KPICard label="Est. APY" value={staking.staking_apy ? formatPercent(Number(staking.staking_apy)) : '—'} />
           </div>
           <DataTable
             columns={VALIDATOR_COLUMNS}
-            data={staking.validators}
-            rowKey={(r) => r.validator}
+            data={validators}
+            rowKey={(r) => String(r.validator ?? r.name ?? Math.random())}
             skeletonRows={10}
           />
         </>

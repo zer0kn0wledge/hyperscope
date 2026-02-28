@@ -1,20 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
 import { DataTable, type Column } from '@/components/ui/DataTable';
-import { Tabs } from '@/components/ui/Tabs';
-import { AreaChartComponent } from '@/components/charts/AreaChart';
 import { ComparisonBar } from '@/components/charts/ComparisonBar';
+import { Badge } from '@/components/ui/Badge';
 import { Tooltip, InfoIcon } from '@/components/ui/Tooltip';
 import {
   useCEXSnapshot,
-  useCEXVolumeHistory,
-  useCEXOIHistory,
-  useCEXFundingHistory,
 } from '@/hooks/useAPI';
 import { formatUSD, formatFunding, fundingClass } from '@/lib/format';
-import type { CEXSnapshot, CEXFundingHistory } from '@/lib/types';
 import { CEX_EXCHANGES } from '@/lib/constants';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -23,68 +17,68 @@ function cn(...classes: (string | undefined | null | boolean)[]) {
   return twMerge(clsx(classes));
 }
 
-const CEX_TABS = CEX_EXCHANGES.map((e) => ({ id: e.key, label: e.name }));
+// Backend returns snake_case: { exchange, volume_24h, open_interest, btc_funding_rate, source, rank }
+type CEXRow = Record<string, unknown>;
 
-const SNAPSHOT_COLUMNS: Column<CEXSnapshot>[] = [
+const SNAPSHOT_COLUMNS: Column<CEXRow>[] = [
   {
     key: 'exchange',
     header: 'Exchange',
     render: (v) => {
-      const exc = CEX_EXCHANGES.find((e) => e.name === String(v));
+      const name = String(v);
+      const exc = CEX_EXCHANGES.find((e) => e.name === name);
       return (
         <div className="flex items-center gap-2">
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{ background: exc?.color ?? '#8B949E' }}
           />
-          <span className="font-semibold">{String(v)}</span>
+          <span className="font-semibold">{name}</span>
+          {exc?.isDex && <Badge variant="neutral">DEX</Badge>}
         </div>
       );
     },
   },
   {
-    key: 'volume24h',
+    key: 'total_volume_24h_usd',
     header: '24h Volume',
     sortable: true,
     align: 'right',
     render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
   },
   {
-    key: 'openInterest',
+    key: 'total_oi_usd',
     header: 'Open Interest',
     sortable: true,
     align: 'right',
     render: (v) => <span className="number text-text-secondary">{formatUSD(Number(v))}</span>,
   },
   {
-    key: 'fundingRate',
+    key: 'btc_funding_rate',
     header: 'BTC Funding',
     align: 'right',
-    render: (v) => (
-      <span className={cn('number', fundingClass(Number(v)))}>
-        {formatFunding(Number(v))}
-      </span>
-    ),
+    render: (v) => {
+      const val = Number(v);
+      if (!val && val !== 0) return <span className="text-text-muted">—</span>;
+      return <span className={cn('number', fundingClass(val))}>{formatFunding(val)}</span>;
+    },
   },
   {
-    key: 'volume24h',
-    header: 'Volume Share',
-    render: (v, row) => {
-      return <div className="w-32"><ComparisonBar value={Number(v)} max={Number((row as CEXSnapshot).volume24h) * 3} color="#7B5EA7" /></div>;
+    key: 'oi_share_pct',
+    header: 'OI Share',
+    align: 'right',
+    render: (v) => {
+      const pct = Number(v);
+      return <div className="flex items-center gap-2"><div className="w-24"><ComparisonBar value={pct} max={100} color="#7B5EA7" /></div><span className="number text-xs">{pct.toFixed(1)}%</span></div>;
     },
   },
 ];
 
 export default function CEXComparePage() {
-  const [selectedExchange, setSelectedExchange] = useState(CEX_EXCHANGES[0].key);
+  const { data: rawSnapshot, isLoading: snapLoading } = useCEXSnapshot();
 
-  const { data: snapshot, isLoading: snapLoading } = useCEXSnapshot();
-  const { data: volumeHistory, isLoading: volLoading } = useCEXVolumeHistory();
-  const { data: oiHistory, isLoading: oiLoading } = useCEXOIHistory();
-  const { data: fundingHistory, isLoading: fundLoading } = useCEXFundingHistory(
-    selectedExchange,
-    'BTC'
-  );
+  // Backend returns { exchanges: [...] }
+  const snapshot = (rawSnapshot as unknown as { exchanges?: CEXRow[] })?.exchanges ?? (rawSnapshot as CEXRow[] | undefined) ?? [];
 
   return (
     <PageContainer>
@@ -95,49 +89,10 @@ export default function CEXComparePage() {
 
       <DataTable
         columns={SNAPSHOT_COLUMNS}
-        data={snapshot ?? []}
+        data={snapshot}
         isLoading={snapLoading}
-        rowKey={(r) => r.exchange}
+        rowKey={(r) => String(r.exchange)}
         skeletonRows={4}
-      />
-
-      <SectionHeader title="Volume History" subtitle="30-day volume comparison" />
-      <AreaChartComponent
-        data={volumeHistory ?? []}
-        lines={CEX_EXCHANGES.map((e) => ({ key: e.key, color: e.color, label: e.name }))}
-        xKey="time"
-        isLoading={volLoading}
-        formatY={(v) => formatUSD(v)}
-        formatX={(v) => new Date(v).toLocaleDateString()}
-        multiLine
-      />
-
-      <SectionHeader title="OI History" subtitle="30-day open interest comparison" />
-      <AreaChartComponent
-        data={oiHistory ?? []}
-        lines={CEX_EXCHANGES.map((e) => ({ key: e.key, color: e.color, label: e.name }))}
-        xKey="time"
-        isLoading={oiLoading}
-        formatY={(v) => formatUSD(v)}
-        formatX={(v) => new Date(v).toLocaleDateString()}
-        multiLine
-      />
-
-      <SectionHeader
-        title="Funding Rate History"
-        subtitle="Select exchange and asset"
-      />
-      <div className="flex items-center gap-3 mb-4">
-        <Tabs tabs={CEX_TABS} activeTab={selectedExchange} onTabChange={setSelectedExchange} size="sm" />
-      </div>
-      <AreaChartComponent
-        data={fundingHistory ?? []}
-        dataKey="rate"
-        xKey="time"
-        color="#7B5EA7"
-        isLoading={fundLoading}
-        formatY={(v) => formatFunding(v)}
-        formatX={(v) => new Date(v).toLocaleDateString()}
       />
     </PageContainer>
   );

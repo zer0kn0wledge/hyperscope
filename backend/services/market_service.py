@@ -483,8 +483,8 @@ class MarketService:
             return_exceptions=True,
         )
 
-        thresholds = {"BTC": 500_000, "ETH": 500_000}
-        default_threshold = 50_000
+        thresholds = {"BTC": 100_000, "ETH": 100_000}
+        default_threshold = 10_000
 
         large_trades = []
         for coin, trades in zip(top_coins, results):

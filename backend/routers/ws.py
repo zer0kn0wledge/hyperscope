@@ -165,13 +165,41 @@ class SubscriptionManager:
                 backoff = min(backoff * 2, 30.0)
 
     async def _broadcast(self, key: str, message: str) -> None:
-        """Send a message to all frontend clients subscribed to this channel."""
+        """Send a message to all frontend clients subscribed to this channel.
+        Wraps HL messages in {channel, data} envelope for the hub endpoint."""
         subscribers = set(self._subscribers.get(key, set()))
         dead_clients = set()
 
+        # Wrap in channel envelope so frontend can route messages
+        try:
+            parsed = json.loads(message)
+            # The HL message has a 'channel' field already; use our key as the frontend channel
+            # Map HL subscription types back to frontend channel names
+            hl_channel = parsed.get("channel", "")
+            coin = ""
+            if isinstance(parsed.get("data"), dict):
+                coin = parsed["data"].get("coin", "")
+            elif hl_channel == "trades" and isinstance(parsed.get("data"), list):
+                if parsed["data"]:
+                    coin = parsed["data"][0].get("coin", "")
+            
+            # Build frontend-friendly channel name
+            ch_map = {
+                "l2Book": f"l2book.{coin}" if coin else "l2book",
+                "trades": f"trades.{coin}" if coin else "trades",
+                "allMids": "all-mids",
+                "bbo": f"bbo.{coin}" if coin else "bbo",
+                "candle": f"candle.{coin}" if coin else "candle",
+                "activeAssetCtx": f"activeAssetCtx.{coin}" if coin else "activeAssetCtx",
+            }
+            frontend_channel = ch_map.get(hl_channel, key)
+            envelope = json.dumps({"channel": frontend_channel, "data": parsed.get("data", parsed)})
+        except (json.JSONDecodeError, Exception):
+            envelope = message
+
         for ws in subscribers:
             try:
-                await ws.send_text(message)
+                await ws.send_text(envelope)
             except Exception:
                 dead_clients.add(ws)
 
@@ -313,3 +341,111 @@ async def ws_active_asset(websocket: WebSocket, pair: str) -> None:
     """
     subscription = {"type": "activeAssetCtx", "coin": pair.upper()}
     await _proxy_subscription(websocket, subscription)
+
+
+# ── Unified Hub Endpoint ──────────────────────────────────────────────────
+
+
+def _parse_channel(channel: str) -> dict[str, Any] | None:
+    """
+    Parse a frontend channel string like 'l2book.BTC' or 'trades.ETH'
+    into an HL subscription dict.
+    """
+    parts = channel.split(".")
+    ch_type = parts[0]
+
+    mapping: dict[str, dict[str, Any]] = {
+        "l2book": {"type": "l2Book", "coin": parts[1].upper() if len(parts) > 1 else ""},
+        "trades": {"type": "trades", "coin": parts[1].upper() if len(parts) > 1 else ""},
+        "all-mids": {"type": "allMids", "dex": ""},
+        "allMids": {"type": "allMids", "dex": ""},
+        "bbo": {"type": "bbo", "coin": parts[1].upper() if len(parts) > 1 else ""},
+        "candle": {
+            "type": "candle",
+            "coin": parts[1].upper() if len(parts) > 1 else "",
+            "interval": parts[2] if len(parts) > 2 else "1m",
+        },
+        "activeAssetCtx": {
+            "type": "activeAssetCtx",
+            "coin": parts[1].upper() if len(parts) > 1 else "",
+        },
+    }
+
+    return mapping.get(ch_type)
+
+
+@router.websocket("")
+async def ws_hub(websocket: WebSocket) -> None:
+    """
+    Unified WebSocket hub endpoint.
+    Frontend connects once and sends subscribe/unsubscribe messages:
+      { "type": "subscribe", "channel": "l2book.BTC" }
+      { "type": "unsubscribe", "channel": "trades.ETH" }
+      { "method": "ping" }
+
+    The hub maps channel strings to HL subscriptions and multiplexes
+    all data back over the single connection.
+    """
+    await websocket.accept()
+    active_subs: dict[str, dict[str, Any]] = {}  # channel -> HL subscription
+    logger.info("[ws_hub] Client connected")
+
+    try:
+        while True:
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=35.0)
+            except asyncio.TimeoutError:
+                # Send keepalive
+                try:
+                    await websocket.send_text('{"channel":"pong"}')
+                except Exception:
+                    break
+                continue
+
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = msg.get("type") or msg.get("method", "")
+            channel = msg.get("channel", "")
+
+            if msg_type == "ping":
+                await websocket.send_text('{"channel":"pong"}')
+
+            elif msg_type == "subscribe" and channel:
+                # Special channels that don't map to HL WS
+                if channel in ("large-trades", "liquidations"):
+                    active_subs[channel] = {"type": channel}
+                    await websocket.send_text(
+                        json.dumps({"channel": channel, "data": {"subscribed": True}})
+                    )
+                    continue
+
+                sub = _parse_channel(channel)
+                if sub:
+                    active_subs[channel] = sub
+                    await _manager.subscribe(websocket, sub)
+                    logger.debug("[ws_hub] Subscribed: %s -> %s", channel, sub)
+                else:
+                    await websocket.send_text(
+                        json.dumps({"channel": "error", "data": {"msg": f"Unknown channel: {channel}"}})
+                    )
+
+            elif msg_type == "unsubscribe" and channel:
+                sub = active_subs.pop(channel, None)
+                if sub and sub.get("type") not in ("large-trades", "liquidations"):
+                    await _manager.unsubscribe(websocket, sub)
+
+    except (WebSocketDisconnect, Exception) as exc:
+        logger.debug("[ws_hub] Client disconnected: %s", exc)
+    finally:
+        # Clean up all subscriptions
+        for ch, sub in active_subs.items():
+            if sub.get("type") not in ("large-trades", "liquidations"):
+                try:
+                    await _manager.unsubscribe(websocket, sub)
+                except Exception:
+                    pass
+        await _manager.remove_client(websocket)
+        logger.info("[ws_hub] Client fully cleaned up")
