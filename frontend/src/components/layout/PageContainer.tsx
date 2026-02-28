@@ -1,35 +1,42 @@
-import { type ReactNode } from 'react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
-}
+import { ReactNode } from 'react';
 
 interface PageContainerProps {
   children: ReactNode;
   className?: string;
+  maxWidth?: string;
 }
 
-export function PageContainer({ children, className }: PageContainerProps) {
+export function PageContainer({ children, className, maxWidth = '1400px' }: PageContainerProps) {
   return (
-    <div className={cn('p-4 space-y-4', className)}>{children}</div>
+    <div
+      className={className}
+      style={{
+        padding: '1.5rem 2rem',
+        maxWidth,
+        margin: '0 auto',
+        width: '100%',
+        minHeight: '100vh',
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
 interface SectionHeaderProps {
   title: string;
-  subtitle?: ReactNode;
-  className?: string;
+  subtitle?: string;
+  action?: ReactNode;
 }
 
-export function SectionHeader({ title, subtitle, className }: SectionHeaderProps) {
+export function SectionHeader({ title, subtitle, action }: SectionHeaderProps) {
   return (
-    <div className={cn('space-y-0.5', className)}>
-      <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-      {subtitle && (
-        <p className="text-xs text-text-secondary flex items-center gap-1">{subtitle}</p>
-      )}
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem' }}>
+      <div>
+        <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#e8e8e8', margin: '0 0 0.2rem', letterSpacing: '-0.01em', fontFamily: 'Inter, sans-serif' }}>{title}</h2>
+        {subtitle && <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', margin: 0, fontFamily: 'Inter, sans-serif' }}>{subtitle}</p>}
+      </div>
+      {action && <div>{action}</div>}
     </div>
   );
 }

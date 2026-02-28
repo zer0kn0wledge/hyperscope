@@ -1,79 +1,86 @@
-// ===========================================================================
-// Number & currency formatters for the HyperScope UI
-// ===========================================================================
-
 /**
- * Format a USD value, auto-selecting compact or full notation.
- * Null / undefined / NaN → '\u2014'
+ * Formatting utilities for HyperScope analytics dashboard.
  */
-function usd(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return '\u2014';
-  const abs = Math.abs(value);
-  if (abs >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
-  return `$${value.toFixed(2)}`;
+
+const NULL_DISPLAY = '—';
+
+function safeNum(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
 }
 
-/**
- * Compact number (no $ prefix).
- */
-function compact(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return '\u2014';
-  const abs = Math.abs(value);
-  if (abs >= 1e12) return `${(value / 1e12).toFixed(2)}T`;
-  if (abs >= 1e9)  return `${(value / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6)  return `${(value / 1e6).toFixed(2)}M`;
-  if (abs >= 1e3)  return `${(value / 1e3).toFixed(2)}K`;
-  return value.toFixed(2);
-}
+export const fmt = {
+  /**
+   * Format a USD value with appropriate suffix (B, M, K).
+   */
+  usd(v: unknown, decimals = 2): string {
+    const n = safeNum(v);
+    if (n === null) return NULL_DISPLAY;
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(decimals)}B`;
+    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(decimals)}M`;
+    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(decimals)}K`;
+    return `${sign}$${abs.toFixed(decimals)}`;
+  },
 
-/**
- * Price: high-precision for small values.
- */
-function price(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return '\u2014';
-  if (value >= 1000) return `$${value.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
-  if (value >= 1)    return `$${value.toFixed(4)}`;
-  if (value >= 0.01) return `$${value.toFixed(6)}`;
-  return `$${value.toFixed(8)}`;
-}
+  /**
+   * Format a price with adaptive decimal places.
+   */
+  price(v: unknown): string {
+    const n = safeNum(v);
+    if (n === null) return NULL_DISPLAY;
+    if (n >= 1000) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (n >= 1) return n.toFixed(4);
+    if (n >= 0.01) return n.toFixed(6);
+    return n.toFixed(8);
+  },
 
-/**
- * Generic number with optional decimal places.
- */
-function num(value: number | null | undefined, decimals = 2): string {
-  if (value == null || isNaN(value)) return '\u2014';
-  return value.toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: decimals,
-  });
-}
+  /**
+   * Format a generic number.
+   */
+  num(v: unknown, decimals = 2): string {
+    const n = safeNum(v);
+    if (n === null) return NULL_DISPLAY;
+    return n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  },
 
-/**
- * Smart formatter — picks the best display format.
- */
-function smart(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return '\u2014';
-  const abs = Math.abs(value);
-  // Looks like a price
-  if (abs >= 0.01 && abs < 1e7) return price(value);
-  return compact(value);
-}
+  /**
+   * Format a funding rate as a percentage.
+   */
+  funding(v: unknown): string {
+    const n = safeNum(v);
+    if (n === null) return NULL_DISPLAY;
+    const pct = n * 100;
+    return `${pct >= 0 ? '+' : ''}${pct.toFixed(4)}%`;
+  },
 
-/**
- * Returns a colour string for a heat-map cell based on pct change.
- */
-export function getHeatmapColor(pct: number): string {
-  if (pct >= 5)   return 'rgba(0, 255, 136, 0.7)';
-  if (pct >= 2)   return 'rgba(0, 255, 136, 0.45)';
-  if (pct >= 0.5) return 'rgba(0, 255, 136, 0.22)';
-  if (pct > 0)    return 'rgba(0, 255, 136, 0.10)';
-  if (pct === 0)  return 'rgba(255, 255, 255, 0.05)';
-  if (pct >= -0.5) return 'rgba(255, 77, 77, 0.10)';
-  if (pct >= -2)   return 'rgba(255, 77, 77, 0.22)';
-  if (pct >= -5)   return 'rgba(255, 77, 77, 0.45)';
-  return 'rgba(255, 77, 77, 0.7)';
-}
+  /**
+   * Format a percentage change.
+   */
+  pct(v: unknown, decimals = 2): string {
+    const n = safeNum(v);
+    if (n === null) return NULL_DISPLAY;
+    return `${n >= 0 ? '+' : ''}${n.toFixed(decimals)}%`;
+  },
 
-export const fmt = { usd, compact, price, num, smart };
+  /**
+   * Shorten an address for display.
+   */
+  address(addr: string): string {
+    if (!addr) return NULL_DISPLAY;
+    if (addr.length <= 12) return addr;
+    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  },
+
+  /**
+   * Format a unix timestamp (ms or s) to a readable string.
+   */
+  timestamp(v: unknown): string {
+    const n = safeNum(v);
+    if (n === null) return NULL_DISPLAY;
+    const ms = n > 1e12 ? n : n * 1000;
+    return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  },
+};

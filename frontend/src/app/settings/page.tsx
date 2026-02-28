@@ -2,202 +2,152 @@
 
 import { useState } from 'react';
 import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-import { Moon, Sun, Monitor, Check, RefreshCw } from 'lucide-react';
+import { useAPIHealth } from '@/hooks/useAPI';
+import { API_BASE } from '@/lib/constants';
 
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
-}
-
-interface ToggleProps {
-  label: string;
-  description?: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}
-
-function Toggle({ label, description, checked, onChange }: ToggleProps) {
+function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-bg-border last:border-0">
-      <div>
-        <p className="text-text-primary font-medium">{label}</p>
-        {description && <p className="text-text-secondary text-xs mt-0.5">{description}</p>}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 0', borderBottom: '1px solid rgba(0,255,136,0.06)' }}>
+      <div style={{ flex: 1, marginRight: '2rem' }}>
+        <div style={{ fontSize: '0.875rem', color: '#e8e8e8', fontWeight: 500, fontFamily: 'Inter, sans-serif', marginBottom: description ? '0.25rem' : 0 }}>{label}</div>
+        {description && <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', fontFamily: 'Inter, sans-serif' }}>{description}</div>}
       </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={cn(
-          'relative w-10 h-6 rounded-full transition-colors',
-          checked ? 'bg-accent-cyan' : 'bg-bg-border'
-        )}
-      >
-        <span
-          className={cn(
-            'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
-            checked ? 'translate-x-5' : 'translate-x-1'
-          )}
-        />
-      </button>
+      {children}
     </div>
   );
 }
 
-interface SliderProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  format?: (v: number) => string;
-  onChange: (v: number) => void;
+function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      style={{
+        width: 44,
+        height: 24,
+        borderRadius: 12,
+        background: value ? 'rgba(0,255,136,0.3)' : 'rgba(255,255,255,0.1)',
+        border: value ? '1px solid rgba(0,255,136,0.5)' : '1px solid rgba(255,255,255,0.15)',
+        cursor: 'pointer',
+        position: 'relative',
+        transition: 'all 0.2s ease',
+        flexShrink: 0,
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          top: 2,
+          left: value ? 22 : 2,
+          width: 18,
+          height: 18,
+          borderRadius: '50%',
+          background: value ? '#00ff88' : 'rgba(255,255,255,0.4)',
+          transition: 'all 0.2s ease',
+          boxShadow: value ? '0 0 8px rgba(0,255,136,0.6)' : 'none',
+        }}
+      />
+    </button>
+  );
 }
 
-function Slider({ label, value, min, max, step = 1, format, onChange }: SliderProps) {
+function StatusDot({ ok }: { ok: boolean }) {
   return (
-    <div className="py-3 border-b border-bg-border last:border-0">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-text-primary font-medium">{label}</p>
-        <span className="number text-accent-cyan text-sm">
-          {format ? format(value) : value}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-1.5 bg-bg-border rounded-full appearance-none cursor-pointer accent-accent-cyan"
-      />
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: ok ? '#00ff88' : '#ff4d4d', boxShadow: ok ? '0 0 6px rgba(0,255,136,0.8)' : '0 0 6px rgba(255,77,77,0.8)' }} />
+      <span style={{ fontSize: '0.8125rem', color: ok ? '#00ff88' : '#ff4d4d', fontFamily: 'JetBrains Mono, monospace' }}>{ok ? 'Connected' : 'Disconnected'}</span>
     </div>
   );
 }
 
 export default function SettingsPage() {
-  const [largeTradeThreshold, setLargeTradeThreshold] = useLocalStorage('largeTradeThreshold', 100_000);
-  const [orderThreshold, setOrderThreshold] = useLocalStorage('orderThreshold', 50_000);
-  const [enableSounds, setEnableSounds] = useLocalStorage('enableSounds', false);
-  const [enableAnimations, setEnableAnimations] = useLocalStorage('enableAnimations', true);
-  const [defaultTimeframe, setDefaultTimeframe] = useLocalStorage('defaultTimeframe', '1h');
-  const [compactMode, setCompactMode] = useLocalStorage('compactMode', false);
-  const [showUSD, setShowUSD] = useLocalStorage('showUSD', true);
-  const [saved, setSaved] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [compactMode, setCompactMode] = useState(false);
+  const [showAnimations, setShowAnimations] = useState(true);
+  const [refreshInterval, setRefreshInterval] = useState<30 | 60 | 120>(30);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  const TIMEFRAME_OPTIONS = ['1m', '5m', '15m', '1h', '4h', '1d'];
+  const { data: health, isLoading: healthLoading, refetch: refetchHealth } = useAPIHealth();
+  const isConnected = !healthLoading && !!(health as any)?.status;
 
   return (
     <PageContainer>
-      <SectionHeader title="Settings" subtitle="Customize your HyperScope experience" />
-
-      {/* Display Settings */}
-      <div className="card p-4">
-        <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
-          <Monitor size={16} className="text-accent-cyan" />
-          Display
-        </h3>
-        <Toggle
-          label="Compact Mode"
-          description="Reduce padding for denser information display"
-          checked={compactMode}
-          onChange={setCompactMode}
-        />
-        <Toggle
-          label="Show USD Values"
-          description="Display values in USD where applicable"
-          checked={showUSD}
-          onChange={setShowUSD}
-        />
-        <Toggle
-          label="Enable Animations"
-          description="Animate chart transitions and data updates"
-          checked={enableAnimations}
-          onChange={setEnableAnimations}
-        />
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#e8e8e8', margin: '0 0 0.375rem', letterSpacing: '-0.02em', fontFamily: 'Inter, sans-serif' }}>Settings</h1>
+        <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.35)', margin: 0, fontFamily: 'Inter, sans-serif' }}>Configure HyperScope display and data preferences</p>
       </div>
 
-      {/* Alert Settings */}
-      <div className="card p-4">
-        <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
-          <RefreshCw size={16} className="text-accent-cyan" />
-          Data & Alerts
-        </h3>
-        <Slider
-          label="Large Trade Threshold"
-          value={largeTradeThreshold}
-          min={50_000}
-          max={1_000_000}
-          step={50_000}
-          format={(v) => `$${(v / 1000).toFixed(0)}k`}
-          onChange={setLargeTradeThreshold}
-        />
-        <Slider
-          label="Large Order Threshold"
-          value={orderThreshold}
-          min={10_000}
-          max={500_000}
-          step={10_000}
-          format={(v) => `$${(v / 1000).toFixed(0)}k`}
-          onChange={setOrderThreshold}
-        />
-        <Toggle
-          label="Enable Sound Alerts"
-          description="Play a sound on large trades"
-          checked={enableSounds}
-          onChange={setEnableSounds}
-        />
-      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+        <div>
+          <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
+            <SectionHeader title="Data" subtitle="Refresh and update settings" />
+            <SettingRow label="Auto Refresh" description="Automatically refresh data on an interval">
+              <Toggle value={autoRefresh} onChange={setAutoRefresh} />
+            </SettingRow>
+            <SettingRow label="Refresh Interval" description="How often to poll for new data">
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {([30, 60, 120] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setRefreshInterval(s)}
+                    style={{ background: refreshInterval === s ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.04)', border: refreshInterval === s ? '1px solid rgba(0,255,136,0.3)' : '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: refreshInterval === s ? '#00ff88' : 'rgba(255,255,255,0.45)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.75rem', padding: '0.25rem 0.625rem', cursor: 'pointer' }}
+                  >
+                    {s}s
+                  </button>
+                ))}
+              </div>
+            </SettingRow>
+          </div>
 
-      {/* Chart Defaults */}
-      <div className="card p-4">
-        <h3 className="text-text-primary font-semibold mb-4 flex items-center gap-2">
-          <Sun size={16} className="text-accent-cyan" />
-          Chart Defaults
-        </h3>
-        <div className="py-3">
-          <p className="text-text-primary font-medium mb-2">Default Timeframe</p>
-          <div className="flex gap-2 flex-wrap">
-            {TIMEFRAME_OPTIONS.map((tf) => (
-              <button
-                key={tf}
-                onClick={() => setDefaultTimeframe(tf)}
-                className={cn(
-                  'px-3 py-1.5 rounded text-sm font-medium transition-colors',
-                  defaultTimeframe === tf
-                    ? 'bg-accent-cyan text-bg-primary'
-                    : 'bg-bg-hover text-text-secondary hover:text-text-primary'
-                )}
-              >
-                {tf}
-              </button>
-            ))}
+          <div className="card" style={{ padding: '1.25rem' }}>
+            <SectionHeader title="Display" subtitle="UI and visual preferences" />
+            <SettingRow label="Compact Mode" description="Reduce padding and spacing throughout the UI">
+              <Toggle value={compactMode} onChange={setCompactMode} />
+            </SettingRow>
+            <SettingRow label="Animations" description="Enable smooth transitions and effects">
+              <Toggle value={showAnimations} onChange={setShowAnimations} />
+            </SettingRow>
           </div>
         </div>
-      </div>
 
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          className={cn(
-            'flex items-center gap-2 px-6 py-2.5 rounded-lg font-medium transition-all',
-            saved
-              ? 'bg-accent-green text-bg-primary'
-              : 'bg-accent-cyan text-bg-primary hover:bg-accent-cyan/90'
-          )}
-        >
-          {saved ? (
-            <><Check size={16} /> Saved!</>
-          ) : (
-            'Save Settings'
-          )}
-        </button>
+        <div>
+          <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
+            <SectionHeader title="API Connection" subtitle="Backend connectivity status" />
+            <SettingRow label="API Status">
+              {healthLoading ? (
+                <div style={{ width: 80, height: 16, background: 'rgba(255,255,255,0.05)', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              ) : (
+                <StatusDot ok={isConnected} />
+              )}
+            </SettingRow>
+            <SettingRow label="API Endpoint" description="Backend base URL">
+              <code style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontFamily: 'JetBrains Mono, monospace', background: 'rgba(255,255,255,0.04)', padding: '0.25rem 0.5rem', borderRadius: '4px' }}>{API_BASE}</code>
+            </SettingRow>
+            <div style={{ paddingTop: '1rem' }}>
+              <button
+                onClick={() => refetchHealth()}
+                style={{ background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.2)', borderRadius: '8px', color: '#00ff88', fontFamily: 'Inter, sans-serif', fontSize: '0.8125rem', padding: '0.5rem 1.25rem', cursor: 'pointer', width: '100%' }}
+              >
+                Test Connection
+              </button>
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: '1.25rem' }}>
+            <SectionHeader title="About" subtitle="HyperScope version info" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {[
+                { label: 'Version', value: '1.0.0' },
+                { label: 'Frontend', value: 'Next.js 14 + React 18' },
+                { label: 'Data Source', value: 'Hyperliquid API' },
+                { label: 'Charts', value: 'Recharts 2.x' },
+              ].map((item) => (
+                <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.4)', fontFamily: 'Inter, sans-serif' }}>{item.label}</span>
+                  <span style={{ fontSize: '0.8125rem', color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace' }}>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </PageContainer>
   );
