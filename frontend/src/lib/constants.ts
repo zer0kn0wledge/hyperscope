@@ -1,22 +1,22 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-
-export const REFRESH_INTERVAL = 30_000; // 30 seconds
-
+/* ── Design tokens ─────────────────────────────────── */
 export const CHART_COLORS = {
   neon: '#00ff88',
-  neonDim: '#00cc6a',
+  neonDim: '#00ff8840',
   red: '#ff4d4d',
-  redDim: '#cc3333',
-  blue: '#3b82f6',
-  purple: '#a855f7',
-  yellow: '#eab308',
-  orange: '#f97316',
-  cyan: '#06b6d4',
+  redDim: '#ff4d4d40',
   white: '#e8e8e8',
-  muted: 'rgba(255,255,255,0.3)',
-} as const;
+  whiteDim: '#e8e8e840',
+  bg: '#000000',
+  card: '#0a0a0a',
+  border: '#1a1a1a',
+};
 
-export const CANDLE_INTERVALS = ['5m', '15m', '1h', '4h', '1d'] as const;
-export type CandleInterval = (typeof CANDLE_INTERVALS)[number];
+export const PAIRS = ['BTC-PERP', 'ETH-PERP', 'SOL-PERP', 'HYPE-PERP'];
 
-export const DEFAULT_ASSETS = ['BTC', 'ETH', 'SOL', 'ARB', 'AVAX', 'BNB', 'DOGE', 'MATIC'] as const;
+/* ── API ──────────────────────────────────────────── */
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ?? 'https://hyperscope-production-7084.up.railway.app';
+
+/* ── Misc ─────────────────────────────────────────── */
+export const REFETCH_INTERVAL = 30_000; // 30 s
+export const STALE_TIME = 15_000; // 15 s
