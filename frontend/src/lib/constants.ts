@@ -78,6 +78,19 @@ export const CANDLE_INTERVALS = [
 
 export type CandleInterval = (typeof CANDLE_INTERVALS)[number]['value'];
 
+// Timeframe options for Select component dropdowns
+export const TIMEFRAME_OPTIONS = [
+  { label: '1 Min', value: '1m' },
+  { label: '5 Min', value: '5m' },
+  { label: '15 Min', value: '15m' },
+  { label: '1 Hour', value: '1h' },
+  { label: '4 Hour', value: '4h' },
+  { label: '1 Day', value: '1d' },
+  { label: '1 Week', value: '1w' },
+];
+
+export type TimeframeOption = (typeof TIMEFRAME_OPTIONS)[number]['value'];
+
 // Heatmap color scale
 export const HEATMAP_COLORS = {
   veryPositive: '#00D1FF',

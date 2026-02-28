@@ -42,6 +42,24 @@ export function useRecentTrades() {
   });
 }
 
+export function useSparklines() {
+  return useQuery({
+    queryKey: ['overview', 'sparklines'],
+    queryFn: overviewAPI.getSparklines,
+    staleTime: REFETCH.FAST,
+    refetchInterval: REFETCH.MEDIUM,
+  });
+}
+
+export function useLargeTrades() {
+  return useQuery({
+    queryKey: ['overview', 'large-trades'],
+    queryFn: overviewAPI.getLargeTrades,
+    staleTime: 5_000,
+    refetchInterval: 15_000,
+  });
+}
+
 // ============================================================
 // Markets Hooks
 // ============================================================

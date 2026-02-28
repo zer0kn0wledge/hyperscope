@@ -57,12 +57,18 @@ export interface MarketAsset {
 
 export interface FundingRateEntry {
   asset: string;
+  coin: string;
   fundingRate: number;
+  funding_rate: number;
   annualizedRate: number;
   predictedRate: number;
   sum1h: number;
   sum8h: number;
   sum24h: number;
+  mark_price: number;
+  open_interest: number;
+  volume_24h: number;
+  price_change_24h: number;
 }
 
 export interface OIDistributionEntry {
@@ -378,6 +384,39 @@ export interface AppSettings {
     traders: number;
     protocol: number;
   };
+}
+
+// ============================================================
+// Trade Types (used by WS hooks and overview/asset pages)
+// ============================================================
+
+export interface Trade {
+  time: number;
+  coin: string;
+  side: 'buy' | 'sell';
+  price: number;
+  size: number;
+  notional: number;
+  hash?: string;
+}
+
+export interface LargeTrade {
+  time: number;
+  coin: string;
+  side: 'buy' | 'sell';
+  price: number;
+  size: number;
+  notional: number;
+  hash?: string;
+}
+
+export interface Liquidation {
+  time: number;
+  coin?: string;
+  side: 'long' | 'short';
+  price: number;
+  size: number;
+  notional: number;
 }
 
 // ============================================================

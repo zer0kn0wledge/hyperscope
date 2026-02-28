@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { WS_URL } from '@/lib/constants';
-import type { WSMessage } from '@/lib/types';
+import type { WSMessage, Trade, LargeTrade } from '@/lib/types';
 
 type MessageHandler = (data: unknown) => void;
 
@@ -126,6 +126,10 @@ class WebSocketManager {
     this.subscriptions = {};
   }
 
+  get status(): 'connected' | 'disconnected' {
+    return this.ws?.readyState === WebSocket.OPEN ? 'connected' : 'disconnected';
+  }
+
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
@@ -141,6 +145,7 @@ function getWSManager(): WebSocketManager {
       unsubscribe: () => {},
       disconnect: () => {},
       isConnected: false,
+      status: 'disconnected' as const,
     } as unknown as WebSocketManager;
   }
   if (!wsManagerInstance) {
@@ -203,4 +208,60 @@ export function useTradesWS(
     pair ? `trades.${pair}` : null,
     stableOnTrade
   );
+}
+
+/**
+ * Hook returning the current WS connection status string.
+ */
+export function useWSStatus(): 'connected' | 'disconnected' {
+  const manager = getWSManager();
+  const [status, setStatus] = useState<'connected' | 'disconnected'>(manager.status);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStatus(manager.status);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [manager]);
+
+  return status;
+}
+
+/**
+ * Hook for subscribing to asset-specific trades via WS.
+ * Returns the latest trades for that asset.
+ */
+export function useAssetTradesWS(asset: string): Trade[] {
+  const [trades, setTrades] = useState<Trade[]>([]);
+
+  const handler = useCallback((data: unknown) => {
+    const trade = data as Trade;
+    setTrades((prev) => [trade, ...prev].slice(0, 100));
+  }, []);
+
+  useWebSocket<Trade>(
+    asset ? `trades.${asset}` : null,
+    handler
+  );
+
+  return trades;
+}
+
+/**
+ * Hook for subscribing to large trades via WS.
+ * Merges WS updates with initial REST data.
+ */
+export function useLargeTradesWS(initialTrades: LargeTrade[]): LargeTrade[] {
+  const [wsTrades, setWsTrades] = useState<LargeTrade[]>([]);
+
+  const handler = useCallback((data: unknown) => {
+    const trade = data as LargeTrade;
+    setWsTrades((prev) => [trade, ...prev].slice(0, 200));
+  }, []);
+
+  useWebSocket<LargeTrade>('large-trades', handler);
+
+  // Merge WS trades with initial data
+  const merged = [...wsTrades, ...initialTrades].slice(0, 200);
+  return merged;
 }

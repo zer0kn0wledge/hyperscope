@@ -3,6 +3,7 @@ import type {
   KPIData,
   HeatmapAsset,
   RecentTrade,
+  LargeTrade,
   MarketAsset,
   FundingRateEntry,
   OIDistributionEntry,
@@ -82,6 +83,7 @@ export const overviewAPI = {
   getHeatmap: () => request<HeatmapAsset[]>('/api/overview/heatmap'),
   getRecentTrades: () => request<RecentTrade[]>('/api/overview/recent-trades'),
   getSparklines: () => request<KPIData['sparklines']>('/api/overview/sparklines'),
+  getLargeTrades: () => request<LargeTrade[]>('/api/overview/recent-trades'),
 };
 
 // Markets API

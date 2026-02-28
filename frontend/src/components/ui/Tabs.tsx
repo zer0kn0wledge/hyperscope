@@ -41,3 +41,6 @@ export function Tabs({ tabs, activeTab, onTabChange, size = 'md', className }: T
     </div>
   );
 }
+
+// Alias for pill-style tabs (same component, exported under both names)
+export const PillTabs = Tabs;
