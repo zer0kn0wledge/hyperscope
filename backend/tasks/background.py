@@ -7,12 +7,12 @@ Schedules periodic fetches to:
 3. Monitor market conditions
 
 Intervals:
-  15s  -> HL market snapshot (metaAndAssetCtxs)
-  30s  -> CEX snapshots (Binance/Bybit/OKX)
-  60s  -> DEX snapshots, predicted fundings
-  5min -> Protocol health (HLP, AF, staking)
-  5min -> CoinGlass comparison data
-  10min -> DeFiLlama fees/TVL
+  15s  → HL market snapshot (metaAndAssetCtxs)
+  30s  → CEX snapshots (Binance/Bybit/OKX)
+  60s  → DEX snapshots, predicted fundings
+  5min → Protocol health (HLP, AF, staking)
+  5min → CoinGlass comparison data
+  10min → DeFiLlama fees/TVL
 """
 
 from __future__ import annotations
@@ -214,18 +214,23 @@ async def _run_periodic(coro_fn, interval_seconds: float, name: str) -> None:
 
 
 async def warm_cache() -> None:
-    """Pre-warm critical caches on startup."""
-    logger.info("[bg] Warming caches...")
+    """Pre-warm critical caches on startup. Non-blocking — failures are logged but don't prevent startup."""
+    logger.info("[bg] Warming caches (non-blocking, 10s timeout)...")
     try:
-        await asyncio.gather(
-            _refresh_market_snapshot(),
-            _refresh_kpis(),
-            _refresh_hype_price(),
-            return_exceptions=True,
+        await asyncio.wait_for(
+            asyncio.gather(
+                _refresh_market_snapshot(),
+                _refresh_kpis(),
+                _refresh_hype_price(),
+                return_exceptions=True,
+            ),
+            timeout=10.0,
         )
         logger.info("[bg] Cache warmup complete")
+    except asyncio.TimeoutError:
+        logger.warning("[bg] Cache warmup timed out after 10s — will populate via background tasks")
     except Exception as exc:
-        logger.error("[bg] Cache warmup failed: %s", exc)
+        logger.warning("[bg] Cache warmup failed (non-fatal): %s", exc)
 
 
 def start_background_tasks() -> None:
