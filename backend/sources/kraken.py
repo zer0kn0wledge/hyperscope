@@ -2,56 +2,50 @@
 Kraken Futures Public API Client
 
 Base URL: https://futures.kraken.com/derivatives/api/v3
-Docs: https://docs.futures.kraken.com
+No auth required for public endpoints.
 """
-
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-import httpx
+from sources.base import BaseHTTPClient, TokenBucket
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://futures.kraken.com/derivatives/api/v3"
+_kraken_rate_limiter = TokenBucket(capacity=10, refill_rate=2.0)
 
 
-class KrakenFuturesClient:
-    """Public endpoints for Kraken Futures."""
+class KrakenFuturesClient(BaseHTTPClient):
+    """Client for Kraken Futures public API endpoints."""
 
-    async def get_snapshot(self) -> dict[str, Any]:
-        """Return aggregate OI, volume, and funding for Kraken Futures."""
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(f"{BASE_URL}/tickers")
-                r.raise_for_status()
-                tickers = r.json().get("tickers", [])
+    def __init__(self) -> None:
+        super().__init__(
+            base_url="https://futures.kraken.com",
+            source_name="kraken_futures",
+            rate_limiter=_kraken_rate_limiter,
+            max_retries=2,
+            backoff_base=1.0,
+        )
 
-            # Filter perpetual contracts only
-            perps = [t for t in tickers if t.get("tag") == "perpetual"]
+    async def tickers(self) -> dict[str, Any] | None:
+        """Get all tickers including funding rates."""
+        return await self.get("/derivatives/api/v3/tickers")
 
-            total_oi = sum(t.get("openInterest", 0) or 0 for t in perps)
-            total_vol = sum(t.get("vol24h", 0) or 0 for t in perps)
-
-            # Use BTC perpetual funding as representative
-            btc = next((t for t in perps if "XBT" in t.get("symbol", "").upper()), None)
-            funding_rate = btc.get("fundingRate") if btc else None
-
-            return {
-                "exchange": "kraken",
-                "oi": total_oi,
-                "volume_24h": total_vol,
-                "funding_rate": funding_rate,
-                "num_pairs": len(perps),
-            }
-        except Exception as exc:
-            logger.warning("[kraken] snapshot failed: %s", exc)
-            return {"exchange": "kraken", "oi": None, "volume_24h": None}
-
-    async def get_history(self) -> list[dict]:
-        """Placeholder — Kraken public API does not expose historical OI/vol."""
-        return []
+    async def btc_funding_rate(self) -> float:
+        """Get current BTC-USD perpetual funding rate."""
+        data = await self.tickers()
+        if not isinstance(data, dict):
+            return 0.0
+        tickers = data.get("tickers", [])
+        for ticker in tickers:
+            if isinstance(ticker, dict) and ticker.get("symbol") == "PF_XBTUSD":
+                try:
+                    return float(ticker.get("fundingRate", 0) or 0)
+                except (TypeError, ValueError):
+                    return 0.0
+        return 0.0
 
 
+# Singleton instance
 kraken_futures_client = KrakenFuturesClient()

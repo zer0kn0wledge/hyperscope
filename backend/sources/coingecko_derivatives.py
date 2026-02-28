@@ -1,69 +1,50 @@
 """
 CoinGecko Derivatives Exchange Data
-Uses Pro API for exchange list, detail, and tickers.
+Uses Pro API for exchange-level OI and volume comparison.
 """
-
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
-import httpx
+from config import settings
+from sources.base import BaseHTTPClient, TokenBucket
 
 logger = logging.getLogger(__name__)
-
-COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY", "")
-BASE_URL = "https://pro-api.coingecko.com/api/v3"
+_cg_deriv_limiter = TokenBucket(capacity=10, refill_rate=5.0)
 
 
-class CoinGeckoDerivClient:
-    """CoinGecko Derivatives Exchange endpoints."""
+class CoinGeckoDerivativesClient(BaseHTTPClient):
+    def __init__(self) -> None:
+        super().__init__(
+            base_url="https://pro-api.coingecko.com",
+            source_name="coingecko_derivatives",
+            headers={
+                "x-cg-pro-api-key": settings.coingecko_api_key,
+                "Accept": "application/json",
+            },
+            rate_limiter=_cg_deriv_limiter,
+            max_retries=2,
+            backoff_base=1.0,
+        )
 
-    def _headers(self) -> dict[str, str]:
-        if COINGECKO_API_KEY:
-            return {"x-cg-pro-api-key": COINGECKO_API_KEY}
-        # Fall back to demo key (rate-limited)
-        return {"x-cg-demo-api-key": COINGECKO_API_KEY}
+    async def derivatives_exchanges(self, per_page: int = 50) -> list[dict[str, Any]] | None:
+        """Get all derivatives exchanges with OI and volume."""
+        return await self.get(
+            "/api/v3/derivatives/exchanges",
+            params={"per_page": per_page, "order": "open_interest_btc_desc"},
+        )
 
-    async def get_exchanges(self) -> list[dict[str, Any]]:
-        """List derivative exchanges with OI and volume."""
-        url = f"{BASE_URL}/derivatives/exchanges"
-        params = {"order": "open_interest_btc_desc", "per_page": 20, "page": 1}
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(url, headers=self._headers(), params=params)
-                r.raise_for_status()
-                return r.json()
-        except Exception as exc:
-            logger.warning("[coingecko] exchanges failed: %s", exc)
-            return []
+    async def derivatives_exchange(self, exchange_id: str) -> dict[str, Any] | None:
+        """Get single exchange details."""
+        return await self.get(f"/api/v3/derivatives/exchanges/{exchange_id}")
 
-    async def get_exchange_detail(self, exchange_id: str) -> dict[str, Any]:
-        """Detail for a single derivative exchange."""
-        url = f"{BASE_URL}/derivatives/exchanges/{exchange_id}"
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(url, headers=self._headers())
-                r.raise_for_status()
-                return r.json()
-        except Exception as exc:
-            logger.warning("[coingecko] exchange detail failed: %s", exc)
-            return {}
-
-    async def get_tickers(self, exchange_id: str) -> list[dict[str, Any]]:
-        """Tickers for a single derivative exchange."""
-        url = f"{BASE_URL}/derivatives/exchanges/{exchange_id}"
-        params = {"include_tickers": "perpetual"}
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(url, headers=self._headers(), params=params)
-                r.raise_for_status()
-                data = r.json()
-                return data.get("tickers", [])
-        except Exception as exc:
-            logger.warning("[coingecko] tickers failed: %s", exc)
-            return []
+    async def btc_price(self) -> float:
+        """Get current BTC price in USD."""
+        data = await self.get("/api/v3/simple/price", params={"ids": "bitcoin", "vs_currencies": "usd"})
+        if isinstance(data, dict) and "bitcoin" in data:
+            return float(data["bitcoin"].get("usd", 0))
+        return 0.0
 
 
-coingecko_deriv_client = CoinGeckoDerivClient()
+coingecko_deriv_client = CoinGeckoDerivativesClient()
