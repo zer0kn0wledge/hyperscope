@@ -24,7 +24,7 @@ from cachetools import TTLCache
 
 logger = logging.getLogger(__name__)
 
-# ── TTL Constants (seconds) ───────────────────────────────────────────────
+# ── TTL Constants (seconds) ───────────────────────────────────────────────────
 
 TTL_MARKET = 30         # metaAndAssetCtxs, heatmap, OI distribution
 TTL_ORDERBOOK = 5       # L2 book snapshots
@@ -41,6 +41,9 @@ TTL_COMPARE = 120       # DEX/CEX comparison
 TTL_CEX_SNAPSHOT = 30   # Binance/Bybit/OKX snapshots
 TTL_CEX_HISTORY = 300   # CEX OI/funding history
 TTL_COINGLASS = 300     # CoinGlass data
+
+# Default TTL when not specified (matches TTL_COMPARE for safety)
+_DEFAULT_TTL = TTL_COMPARE
 
 
 class Cache:
@@ -60,19 +63,23 @@ class Cache:
             self._buckets[ttl] = TTLCache(maxsize=10_000, ttl=ttl)
         return self._buckets[ttl]
 
-    async def get(self, key: str, ttl: int) -> Any | None:
+    async def get(self, key: str, ttl: int = _DEFAULT_TTL) -> Any | None:
         """Retrieve a cached value. Returns None on cache miss or expiry."""
         async with self._lock:
             bucket = self._bucket(ttl)
             return bucket.get(key)
 
-    async def set(self, key: str, value: Any, ttl: int) -> None:
-        """Store a value in the cache with the given TTL."""
+    async def set(self, key: str, value: Any, ttl: int = _DEFAULT_TTL) -> None:
+        """Store a value in the cache with the given TTL.
+
+        TTL is optional — defaults to _DEFAULT_TTL (120s) if not provided.
+        This prevents TypeError when callers forget the TTL argument.
+        """
         async with self._lock:
             bucket = self._bucket(ttl)
             bucket[key] = value
 
-    async def delete(self, key: str, ttl: int) -> None:
+    async def delete(self, key: str, ttl: int = _DEFAULT_TTL) -> None:
         """Remove a specific key from the cache."""
         async with self._lock:
             bucket = self._bucket(ttl)
@@ -96,109 +103,83 @@ class Cache:
         }
 
 
-# ── Time-Series Buffer ────────────────────────────────────────────────────
-
-
 class TimeSeriesBuffer:
     """
-    Rolling in-memory time series buffer.
-    Stores (timestamp, value) pairs up to a max age (seconds).
-    Used for 24h/7d rolling history of market snapshots.
+    Rolling time-series buffer for accumulating periodic snapshots.
+    Stores (timestamp, value) pairs and evicts entries older than max_age_seconds.
+    Thread-safe via asyncio.Lock.
     """
 
-    def __init__(self, max_age_seconds: int = 86_400) -> None:
-        self.max_age = max_age_seconds
+    def __init__(self, max_age_seconds: float = 86_400) -> None:
         self._data: deque[tuple[float, Any]] = deque()
         self._lock = asyncio.Lock()
+        self._max_age = max_age_seconds
 
     async def append(self, value: Any) -> None:
-        """Append a value with the current timestamp."""
+        """Append a new value with the current timestamp."""
+        now = time.time()
         async with self._lock:
-            now = time.time()
             self._data.append((now, value))
-            self._evict(now)
+            # Evict old entries
+            cutoff = now - self._max_age
+            while self._data and self._data[0][0] < cutoff:
+                self._data.popleft()
 
     async def get_all(self) -> list[tuple[float, Any]]:
-        """Return all non-expired (timestamp, value) pairs."""
+        """Return all stored (timestamp, value) pairs."""
         async with self._lock:
-            self._evict(time.time())
             return list(self._data)
 
     async def get_since(self, since_ts: float) -> list[tuple[float, Any]]:
-        """Return values since a given Unix timestamp."""
+        """Return entries with timestamp >= since_ts."""
         async with self._lock:
-            self._evict(time.time())
             return [(ts, v) for ts, v in self._data if ts >= since_ts]
 
-    def _evict(self, now: float) -> None:
-        """Remove entries older than max_age."""
-        cutoff = now - self.max_age
-        while self._data and self._data[0][0] < cutoff:
-            self._data.popleft()
-
-    async def latest(self) -> Any | None:
-        """Return the most recent value or None."""
+    async def latest(self) -> tuple[float, Any] | None:
+        """Return the most recent entry, or None if empty."""
         async with self._lock:
-            if self._data:
-                return self._data[-1][1]
-            return None
+            return self._data[-1] if self._data else None
 
     def __len__(self) -> int:
         return len(self._data)
 
 
-# ── Spread History Buffer ─────────────────────────────────────────────────
-
-
 class SpreadHistoryBuffer:
     """
-    Tracks bid-ask spread history per trading pair.
-    Stores (timestamp, spread_bps, spread_usd) entries.
+    Specialized buffer for tracking bid/ask spread history per asset.
+    Stores {asset: deque[(timestamp, spread_bps)]} up to max_age_seconds.
     """
 
-    def __init__(self, max_age_seconds: int = 86_400) -> None:
-        self._buffers: dict[str, TimeSeriesBuffer] = {}
+    def __init__(self, max_age_seconds: float = 3_600) -> None:
+        self._data: dict[str, deque[tuple[float, float]]] = {}
+        self._lock = asyncio.Lock()
+        self._max_age = max_age_seconds
 
-    def _get_buffer(self, pair: str) -> TimeSeriesBuffer:
-        if pair not in self._buffers:
-            self._buffers[pair] = TimeSeriesBuffer(max_age_seconds=86_400)
-        return self._buffers[pair]
+    async def append(self, asset: str, spread_bps: float) -> None:
+        """Append a new spread observation for the given asset."""
+        now = time.time()
+        async with self._lock:
+            if asset not in self._data:
+                self._data[asset] = deque()
+            self._data[asset].append((now, spread_bps))
+            cutoff = now - self._max_age
+            while self._data[asset] and self._data[asset][0][0] < cutoff:
+                self._data[asset].popleft()
 
-    async def record(
-        self,
-        pair: str,
-        spread_bps: float,
-        spread_usd: float,
-        mid_price: float,
-    ) -> None:
-        """Record a new spread observation."""
-        await self._get_buffer(pair).append({
-            "spread_bps": spread_bps,
-            "spread_usd": spread_usd,
-            "mid_price": mid_price,
-        })
+    async def get_asset(self, asset: str) -> list[tuple[float, float]]:
+        """Return spread history for a specific asset."""
+        async with self._lock:
+            return list(self._data.get(asset, []))
 
-    async def get_history(
-        self,
-        pair: str,
-        window_hours: float = 1.0,
-    ) -> list[dict[str, Any]]:
-        """Get spread history for a pair within the given window."""
-        since = time.time() - window_hours * 3600
-        buf = self._get_buffer(pair)
-        data = await buf.get_since(since)
-        return [
-            {"timestamp": ts * 1000, **v}  # convert to ms
-            for ts, v in data
-        ]
+    async def get_all(self) -> dict[str, list[tuple[float, float]]]:
+        """Return spread history for all assets."""
+        async with self._lock:
+            return {asset: list(buf) for asset, buf in self._data.items()}
 
 
-# ── Singleton Instances ───────────────────────────────────────────────────
+# ── Singleton instances ───────────────────────────────────────────────────────
 
-# Main cache
 cache = Cache()
-
-# Time-series buffers for background-collected data
 market_snapshot_history = TimeSeriesBuffer(max_age_seconds=7 * 86_400)  # 7 days
 oi_history = TimeSeriesBuffer(max_age_seconds=7 * 86_400)
 volume_history = TimeSeriesBuffer(max_age_seconds=30 * 86_400)
