@@ -1,186 +1,96 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
-import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-import { Skeleton } from './Skeleton';
+import { useState, ReactNode, useCallback } from 'react';
 
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
-}
-
-export interface Column<T> {
-  key: keyof T | string;
-  header: string;
+export interface Column<T = any> {
+  key: string;
+  label: string;
   sortable?: boolean;
-  align?: 'left' | 'center' | 'right';
+  align?: 'left' | 'right' | 'center';
   width?: string;
-  render?: (value: unknown, row: T) => ReactNode;
-  className?: string;
+  render?: (value: any, row: T, index: number) => ReactNode;
 }
 
-interface DataTableProps<T> {
+interface DataTableProps<T = any> {
   columns: Column<T>[];
   data: T[];
-  isLoading?: boolean;
-  error?: Error | null;
-  onRowClick?: (row: T) => void;
+  onRowClick?: (row: T, index: number) => void;
   emptyMessage?: string;
-  skeletonRows?: number;
   className?: string;
   stickyHeader?: boolean;
-  rowKey: (row: T) => string;
+  rowKey?: (row: T, index: number) => string | number;
 }
 
-type SortDir = 'asc' | 'desc' | null;
+type SortDirection = 'asc' | 'desc' | null;
 
-function getNestedValue(obj: unknown, key: string): unknown {
-  return (key as string).split('.').reduce<unknown>((acc, k) => {
-    if (acc && typeof acc === 'object') {
-      return (acc as Record<string, unknown>)[k];
-    }
-    return undefined;
-  }, obj);
+function SortIcon({ direction }: { direction: SortDirection }) {
+  return (
+    <span className="inline-flex flex-col ml-1 gap-[2px]" style={{ verticalAlign: 'middle' }}>
+      <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+        <path d="M3.5 0L6.5 4H0.5L3.5 0Z" fill={direction === 'asc' ? '#00ff88' : 'rgba(255,255,255,0.2)'} />
+      </svg>
+      <svg width="7" height="5" viewBox="0 0 7 5" fill="none">
+        <path d="M3.5 5L0.5 1H6.5L3.5 5Z" fill={direction === 'desc' ? '#00ff88' : 'rgba(255,255,255,0.2)'} />
+      </svg>
+    </span>
+  );
 }
 
-export function DataTable<T>({
-  columns,
-  data,
-  isLoading,
-  error,
-  onRowClick,
-  emptyMessage = 'No data available',
-  skeletonRows = 8,
-  className,
-  stickyHeader = true,
-  rowKey,
+export function DataTable<T extends Record<string, any>>({
+  columns, data, onRowClick, emptyMessage = 'No data available', className = '', stickyHeader = true, rowKey,
 }: DataTableProps<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>(null);
+  const [sortDir, setSortDir] = useState<SortDirection>(null);
 
-  const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : d === 'desc' ? null : 'asc'));
-      if (sortDir === 'desc') setSortKey(null);
+  const handleSort = useCallback((col: Column<T>) => {
+    if (!col.sortable) return;
+    if (sortKey === col.key) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else if (sortDir === 'desc') { setSortKey(null); setSortDir(null); }
+      else setSortDir('asc');
     } else {
-      setSortKey(key);
+      setSortKey(col.key);
       setSortDir('asc');
     }
-  };
+  }, [sortKey, sortDir]);
 
   const sortedData = [...data].sort((a, b) => {
     if (!sortKey || !sortDir) return 0;
-    const aVal = getNestedValue(a, sortKey);
-    const bVal = getNestedValue(b, sortKey);
-    if (aVal === undefined || bVal === undefined) return 0;
-    const comparison =
-      typeof aVal === 'number' && typeof bVal === 'number'
-        ? aVal - bVal
-        : String(aVal).localeCompare(String(bVal));
-    return sortDir === 'asc' ? comparison : -comparison;
+    const av = a[sortKey]; const bv = b[sortKey];
+    if (av === null || av === undefined) return 1;
+    if (bv === null || bv === undefined) return -1;
+    if (typeof av === 'number' && typeof bv === 'number') return sortDir === 'asc' ? av - bv : bv - av;
+    const as = String(av).toLowerCase(); const bs = String(bv).toLowerCase();
+    if (sortDir === 'asc') return as < bs ? -1 : as > bs ? 1 : 0;
+    return as > bs ? -1 : as < bs ? 1 : 0;
   });
 
   return (
-    <div className={cn('overflow-x-auto', className)}>
-      <table className="w-full data-table border-collapse">
+    <div className={`overflow-x-auto ${className}`} style={{ borderRadius: '0 0 12px 12px' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 'max-content' }}>
         <thead>
-          <tr>
+          <tr style={{ background: stickyHeader ? '#0a0a0a' : 'transparent', position: stickyHeader ? 'sticky' : 'static', top: 0, zIndex: 10 }}>
             {columns.map((col) => (
-              <th
-                key={String(col.key)}
-                className={cn(
-                  'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-muted',
-                  'border-b border-border-subtle',
-                  stickyHeader && 'sticky top-0 bg-bg-secondary z-10',
-                  col.sortable && 'cursor-pointer select-none hover:text-text-secondary transition-colors duration-150',
-                  col.align === 'right' && 'text-right',
-                  col.align === 'center' && 'text-center',
-                  col.width && `w-${col.width}`,
-                  col.className
-                )}
-                onClick={() => col.sortable && handleSort(String(col.key))}
-                style={{ width: col.width }}
-              >
-                <div className={cn(
-                  'flex items-center gap-1',
-                  col.align === 'right' && 'justify-end',
-                  col.align === 'center' && 'justify-center'
-                )}>
-                  {col.header}
-                  {col.sortable && (
-                    <span className="text-text-muted/60">
-                      {sortKey === col.key ? (
-                        sortDir === 'asc' ? (
-                          <ChevronUp size={12} className="text-accent-cyan" />
-                        ) : (
-                          <ChevronDown size={12} className="text-accent-cyan" />
-                        )
-                      ) : (
-                        <ChevronsUpDown size={12} />
-                      )}
-                    </span>
-                  )}
-                </div>
+              <th key={col.key} onClick={() => handleSort(col)} style={{ textAlign: col.align ?? 'left', width: col.width, cursor: col.sortable ? 'pointer' : 'default', whiteSpace: 'nowrap', padding: '0.625rem 0.75rem', fontSize: '0.6875rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.08em', color: sortKey === col.key ? '#00ff88' : 'rgba(255,255,255,0.3)', borderBottom: '1px solid rgba(0,255,136,0.08)', userSelect: 'none', fontFamily: 'Inter, sans-serif' }}>
+                {col.label}{col.sortable && <SortIcon direction={sortKey === col.key ? sortDir : null} />}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {isLoading ? (
-            Array.from({ length: skeletonRows }).map((_, i) => (
-              <tr key={i}>
+          {sortedData.length === 0 ? (
+            <tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: '3rem 1rem', color: 'rgba(255,255,255,0.2)', fontSize: '0.875rem', fontFamily: 'JetBrains Mono, monospace' }}>{emptyMessage}</td></tr>
+          ) : (
+            sortedData.map((row, index) => (
+              <tr key={rowKey ? rowKey(row, index) : index} onClick={() => onRowClick?.(row, index)} style={{ cursor: onRowClick ? 'pointer' : 'default', borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.1s ease' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(0,255,136,0.03)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
+              >
                 {columns.map((col) => (
-                  <td key={String(col.key)} className="px-4 py-3">
-                    <Skeleton className="h-4 w-full max-w-[100px]" />
+                  <td key={col.key} style={{ textAlign: col.align ?? 'left', padding: '0.5rem 0.75rem', fontSize: '0.8125rem', color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap' }}>
+                    {col.render ? col.render(row[col.key], row, index) : row[col.key] !== undefined && row[col.key] !== null ? String(row[col.key]) : '—'}
                   </td>
                 ))}
-              </tr>
-            ))
-          ) : error ? (
-            <tr>
-              <td
-                colSpan={columns.length}
-                className="px-4 py-8 text-center text-accent-red text-sm"
-              >
-                Failed to load data
-              </td>
-            </tr>
-          ) : sortedData.length === 0 ? (
-            <tr>
-              <td
-                colSpan={columns.length}
-                className="px-4 py-8 text-center text-text-muted text-sm"
-              >
-                {emptyMessage}
-              </td>
-            </tr>
-          ) : (
-            sortedData.map((row) => (
-              <tr
-                key={rowKey(row)}
-                onClick={() => onRowClick?.(row)}
-                className={cn(
-                  'border-b border-border-subtle/40 transition-colors duration-150',
-                  onRowClick && 'cursor-pointer hover:bg-bg-hover'
-                )}
-              >
-                {columns.map((col) => {
-                  const value = getNestedValue(row, String(col.key));
-                  return (
-                    <td
-                      key={String(col.key)}
-                      className={cn(
-                        'px-4 py-3 text-sm text-text-primary',
-                        col.align === 'right' && 'text-right',
-                        col.align === 'center' && 'text-center',
-                        col.className
-                      )}
-                    >
-                      {col.render ? col.render(value, row) : String(value ?? '—')}
-                    </td>
-                  );
-                })}
               </tr>
             ))
           )}

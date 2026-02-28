@@ -1,68 +1,85 @@
 'use client';
 
 import {
-  PieChart,
+  PieChart as RePieChart,
   Pie,
   Cell,
   Tooltip,
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import { CHART_COLORS } from '@/lib/constants';
 
-const COLORS = [
-  '#00ff88',
-  '#00cc66',
-  '#00ffcc',
-  '#00ff44',
-  '#33ffaa',
-  '#66ffbb',
-  '#99ffd4',
-  '#ccffe8',
+const DEFAULT_COLORS = [
+  CHART_COLORS.neon,
+  CHART_COLORS.blue,
+  CHART_COLORS.purple,
+  CHART_COLORS.yellow,
+  CHART_COLORS.orange,
+  CHART_COLORS.cyan,
+  CHART_COLORS.red,
 ];
 
-interface Props {
-  data: { name: string; value: number }[];
+interface PieDataItem {
+  name: string;
+  value: number;
+  color?: string;
 }
 
-export function PieChart({ data }: Props) {
+interface PieChartWidgetProps {
+  data: PieDataItem[];
+  height?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  showLegend?: boolean;
+  formatter?: (value: number, name: string) => [string, string];
+  labelFormatter?: (name: string, percent: number) => string;
+}
+
+function PieTooltip({ active, payload, formatter }: any) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
+  const [formattedValue, formattedName] = formatter ? formatter(item.value, item.name) : [item.value.toLocaleString(), item.name];
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <PieChart>
-        <Pie
-          data={data}
-          cx="50%"
-          cy="50%"
-          innerRadius={55}
-          outerRadius={85}
-          paddingAngle={2}
-          dataKey="value"
-        >
-          {data.map((_, index) => (
-            <Cell
-              key={`cell-${index}`}
-              fill={COLORS[index % COLORS.length]}
-              stroke="transparent"
-            />
+    <div style={{ background: '#0a0a0a', border: '1px solid rgba(0,255,136,0.2)', borderRadius: '10px', padding: '0.625rem 0.875rem', fontFamily: 'JetBrains Mono, monospace' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', background: item.payload.color ?? item.fill }} />
+        <span style={{ fontSize: '0.75rem', color: '#e8e8e8' }}>{formattedName}</span>
+      </div>
+      <div style={{ fontSize: '0.875rem', color: item.payload.color ?? item.fill, fontWeight: 600, marginTop: '4px' }}>{formattedValue}</div>
+    </div>
+  );
+}
+
+export function PieChartWidget({
+  data,
+  height = 240,
+  innerRadius = 60,
+  outerRadius = 100,
+  showLegend = true,
+  formatter,
+}: PieChartWidgetProps) {
+  const coloredData = data.map((item, i) => ({
+    ...item,
+    color: item.color ?? DEFAULT_COLORS[i % DEFAULT_COLORS.length],
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <RePieChart>
+        <Pie data={coloredData} cx="50%" cy="50%" innerRadius={innerRadius} outerRadius={outerRadius} dataKey="value" strokeWidth={0}>
+          {coloredData.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.85} />
           ))}
         </Pie>
-        <Tooltip
-          contentStyle={{
-            background: '#111',
-            border: '1px solid rgba(0,255,136,0.2)',
-            borderRadius: 4,
-            fontSize: 11,
-            fontFamily: 'monospace',
-            color: '#e0e0e0',
-          }}
-        />
-        <Legend
-          formatter={(value) => (
-            <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontFamily: 'monospace' }}>
-              {value}
-            </span>
-          )}
-        />
-      </PieChart>
+        <Tooltip content={<PieTooltip formatter={formatter} />} />
+        {showLegend && (
+          <Legend
+            formatter={(value) => <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', fontFamily: 'Inter, sans-serif' }}>{value}</span>}
+            wrapperStyle={{ fontSize: '0.75rem' }}
+          />
+        )}
+      </RePieChart>
     </ResponsiveContainer>
   );
 }

@@ -1,65 +1,47 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Check } from 'lucide-react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { SelectHTMLAttributes, forwardRef } from 'react';
 
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
+interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  label?: string;
+  options: Array<{ value: string; label: string }>;
+  error?: string;
 }
 
-interface SelectOption {
-  value: string;
-  label: string;
-}
-
-interface SelectProps {
-  options: SelectOption[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  className?: string;
-}
-
-export function Select({ options, value, onChange, placeholder = 'Select...', className }: SelectProps) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const selected = options.find((o) => o.value === value);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  return (
-    <div ref={ref} className={cn('relative', className)}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-bg-card border border-bg-border rounded-md text-xs text-text-primary hover:border-accent-cyan/50 transition-colors min-w-[100px]"
-      >
-        <span className="flex-1 text-left">{selected?.label ?? placeholder}</span>
-        <ChevronDown className={cn('w-3 h-3 text-text-muted transition-transform', open && 'rotate-180')} />
-      </button>
-      {open && (
-        <div className="absolute top-full mt-1 right-0 z-50 min-w-full bg-bg-card border border-bg-border rounded-md shadow-lg overflow-hidden">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => { onChange(option.value); setOpen(false); }}
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left hover:bg-bg-hover transition-colors"
-            >
-              <Check className={cn('w-3 h-3 shrink-0', option.value === value ? 'text-accent-cyan' : 'opacity-0')} />
-              {option.label}
-            </button>
-          ))}
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  ({ label, options, error, className = '', ...props }, ref) => {
+    return (
+      <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+        {label && (
+          <label style={{ fontSize: '0.6875rem', fontFamily: 'Inter, sans-serif', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'rgba(255,255,255,0.3)' }}>
+            {label}
+          </label>
+        )}
+        <div style={{ position: 'relative' }}>
+          <select
+            ref={ref}
+            {...props}
+            style={{ background: '#060606', border: `1px solid ${error ? 'rgba(255,77,77,0.4)' : 'rgba(0,255,136,0.12)'}`, borderRadius: '8px', color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem', padding: '0.5rem 2rem 0.5rem 0.75rem', width: '100%', cursor: 'pointer', outline: 'none', appearance: 'none', WebkitAppearance: 'none', transition: 'border-color 0.15s ease, box-shadow 0.15s ease', ...(props.style ?? {}) }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,136,0.35)'; e.currentTarget.style.boxShadow = '0 0 0 2px rgba(0,255,136,0.08)'; props.onFocus?.(e); }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = error ? 'rgba(255,77,77,0.4)' : 'rgba(0,255,136,0.12)'; e.currentTarget.style.boxShadow = 'none'; props.onBlur?.(e); }}
+          >
+            {options.map((opt) => (
+              <option key={opt.value} value={opt.value} style={{ background: '#0a0a0a', color: '#e8e8e8' }}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {/* Custom chevron */}
+          <div style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
+              <path d="M1 1L5 5L9 1" stroke="rgba(0,255,136,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
+        {error && <span style={{ fontSize: '0.6875rem', color: '#ff4d4d', fontFamily: 'Inter, sans-serif' }}>{error}</span>}
+      </div>
+    );
+  }
+);
+
+Select.displayName = 'Select';
