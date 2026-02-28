@@ -67,36 +67,35 @@ export default function OverviewPage() {
 
   const trades = useLargeTradesWS(initialTrades ?? []);
 
+  // Type the kpis response loosely since backend returns snake_case
+  const k = kpis as Record<string, number> | undefined;
+
   return (
     <PageContainer>
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KPICard
           label="Total Open Interest"
-          value={kpis?.total_open_interest}
-          format="usd"
+          value={k?.total_open_interest ? formatUSD(k.total_open_interest) : undefined}
           isLoading={kpisLoading}
           sparklineData={sparklines?.oi}
         />
         <KPICard
           label="24h Volume"
-          value={kpis?.total_volume_24h}
-          format="usd"
+          value={k?.total_volume_24h ? formatUSD(k.total_volume_24h) : undefined}
           isLoading={kpisLoading}
           sparklineData={sparklines?.volume}
         />
         <KPICard
           label="HYPE Price"
-          value={kpis?.hype_price}
-          format="usd"
+          value={k?.hype_price ? formatUSD(k.hype_price) : '$-'}
           isLoading={kpisLoading}
           sparklineData={sparklines?.hype_price}
-          trend={kpis?.hype_change_24h}
+          change={k?.hype_change_24h}
         />
         <KPICard
           label="TVL"
-          value={kpis?.tvl}
-          format="usd"
+          value={k?.tvl ? formatUSD(k.tvl) : undefined}
           isLoading={kpisLoading}
         />
       </div>
@@ -110,17 +109,17 @@ export default function OverviewPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Sparkline
             data={sparklines.oi}
-            label="Open Interest (24h)"
+            label="Open Interest (7d)"
             color="#00D1FF"
           />
           <Sparkline
             data={sparklines.volume}
-            label="Volume (24h)"
+            label="Volume (7d)"
             color="#00E676"
           />
           <Sparkline
-            data={sparklines.funding}
-            label="Avg Funding Rate (24h)"
+            data={sparklines.hype_price}
+            label="HYPE Price (7d)"
             color="#7B5EA7"
           />
         </div>
