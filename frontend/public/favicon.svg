@@ -1,35 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <!-- Cat face - black background -->
-  <circle cx="50" cy="50" r="48" fill="#0a0a0a" stroke="#00ff88" stroke-width="1.5"/>
-  
-  <!-- Cat ears -->
-  <polygon points="20,35 32,10 44,35" fill="#0a0a0a" stroke="#00ff88" stroke-width="1.5" stroke-linejoin="round"/>
-  <polygon points="56,35 68,10 80,35" fill="#0a0a0a" stroke="#00ff88" stroke-width="1.5" stroke-linejoin="round"/>
-  
-  <!-- Inner ear -->
-  <polygon points="24,32 32,16 40,32" fill="#00ff88" opacity="0.2"/>
-  <polygon points="60,32 68,16 76,32" fill="#00ff88" opacity="0.2"/>
-  
-  <!-- Eyes - neon glow -->
-  <ellipse cx="35" cy="48" rx="7" ry="6" fill="#00ff88" opacity="0.9"/>
-  <ellipse cx="65" cy="48" rx="7" ry="6" fill="#00ff88" opacity="0.9"/>
-  
-  <!-- Pupils -->
-  <ellipse cx="35" cy="48" rx="3" ry="5" fill="#0a0a0a"/>
-  <ellipse cx="65" cy="48" rx="3" ry="5" fill="#0a0a0a"/>
-  
-  <!-- Nose -->
-  <polygon points="50,57 47,62 53,62" fill="#00ff88" opacity="0.7"/>
-  
-  <!-- Mouth -->
-  <path d="M 47 62 Q 44 67 40 65" stroke="#00ff88" stroke-width="1.2" fill="none" opacity="0.6" stroke-linecap="round"/>
-  <path d="M 53 62 Q 56 67 60 65" stroke="#00ff88" stroke-width="1.2" fill="none" opacity="0.6" stroke-linecap="round"/>
-  
-  <!-- Whiskers left -->
-  <line x1="15" y1="58" x2="42" y2="60" stroke="#00ff88" stroke-width="0.8" opacity="0.5"/>
-  <line x1="15" y1="63" x2="42" y2="63" stroke="#00ff88" stroke-width="0.8" opacity="0.5"/>
-  
-  <!-- Whiskers right -->
-  <line x1="58" y1="60" x2="85" y2="58" stroke="#00ff88" stroke-width="0.8" opacity="0.5"/>
-  <line x1="58" y1="63" x2="85" y2="63" stroke="#00ff88" stroke-width="0.8" opacity="0.5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="32" height="32" rx="6" fill="#000000"/>
+  <path d="M16 4L24 9V19L16 24L8 19V9L16 4Z" fill="#000" stroke="#00ff88" stroke-width="1.5" filter="url(#glow)"/>
+  <path d="M8 9L5 4L10 7" fill="#000" stroke="#00ff88" stroke-width="1.2" stroke-linejoin="round" filter="url(#glow)"/>
+  <path d="M24 9L27 4L22 7" fill="#000" stroke="#00ff88" stroke-width="1.2" stroke-linejoin="round" filter="url(#glow)"/>
+  <polygon points="12,12 14,10 14,14" fill="#00ff88" filter="url(#glow)"/>
+  <polygon points="20,12 18,10 18,14" fill="#00ff88" filter="url(#glow)"/>
+  <polygon points="16,16 15,18 16,19 17,18" fill="#00ff88" opacity="0.8"/>
 </svg>
