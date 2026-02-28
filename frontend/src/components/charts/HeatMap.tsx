@@ -1,7 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { getHeatmapColor } from '@/lib/utils';
+
+function getHeatmapColor(pct: number): { bg: string; border: string } {
+  if (pct >= 5) return { bg: 'rgba(0, 255, 136, 0.25)', border: 'rgba(0, 255, 136, 0.4)' };
+  if (pct >= 2) return { bg: 'rgba(0, 255, 136, 0.15)', border: 'rgba(0, 255, 136, 0.25)' };
+  if (pct >= 0.5) return { bg: 'rgba(0, 255, 136, 0.08)', border: 'rgba(0, 255, 136, 0.15)' };
+  if (pct > 0) return { bg: 'rgba(0, 255, 136, 0.04)', border: 'rgba(0, 255, 136, 0.08)' };
+  if (pct <= -5) return { bg: 'rgba(255, 77, 77, 0.25)', border: 'rgba(255, 77, 77, 0.4)' };
+  if (pct <= -2) return { bg: 'rgba(255, 77, 77, 0.15)', border: 'rgba(255, 77, 77, 0.25)' };
+  if (pct <= -0.5) return { bg: 'rgba(255, 77, 77, 0.08)', border: 'rgba(255, 77, 77, 0.15)' };
+  if (pct < 0) return { bg: 'rgba(255, 77, 77, 0.04)', border: 'rgba(255, 77, 77, 0.08)' };
+  return { bg: 'rgba(255, 255, 255, 0.02)', border: 'rgba(255, 255, 255, 0.06)' };
+}
 
 interface HeatmapItem {
   asset: string;
@@ -13,6 +24,7 @@ interface HeatmapItem {
 
 interface HeatMapProps {
   data: HeatmapItem[];
+  className?: string;
   minTileSize?: number;
   maxTileSize?: number;
 }
@@ -74,7 +86,7 @@ function HeatmapTile({ item, size }: { item: HeatmapItem; size: number }) {
   );
 }
 
-export function HeatMap({ data, minTileSize = 48, maxTileSize = 120 }: HeatMapProps) {
+export function HeatMap({ data, className = '', minTileSize = 48, maxTileSize = 120 }: HeatMapProps) {
   if (!data || data.length === 0) {
     return (
       <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem' }}>
@@ -88,7 +100,7 @@ export function HeatMap({ data, minTileSize = 48, maxTileSize = 120 }: HeatMapPr
   const maxOI = Math.max(...ois);
 
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignContent: 'flex-start' }}>
+    <div className={className} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignContent: 'flex-start' }}>
       {data.map((item) => {
         const size = getTileSize(item.oi ?? 0, minOI, maxOI, minTileSize, maxTileSize);
         return <HeatmapTile key={item.asset} item={item} size={Math.round(size)} />;

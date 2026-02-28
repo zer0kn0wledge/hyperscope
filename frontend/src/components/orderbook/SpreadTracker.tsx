@@ -1,7 +1,7 @@
 'use client';
 
-import { AreaChartComponent } from '@/components/charts/AreaChart';
-import { useSpreadHistory } from '@/hooks/useHyperscope';
+import { AreaChartWidget } from '@/components/charts/AreaChart';
+import { useSpreadHistory } from '@/hooks/useAPI';
 
 interface Props {
   pair: string;
@@ -13,11 +13,11 @@ export function SpreadTracker({ pair }: Props) {
   if (isLoading)
     return (
       <div className="card h-40 flex items-center justify-center">
-        <span className="text-neon-green/40 font-mono text-xs">loading spread...</span>
+        <span className="text-neon/40 font-mono text-xs">loading spread...</span>
       </div>
     );
 
-  const chartData = data.map(
+  const chartData = (data as any[]).map(
     (d: { ts: number; spread_pct: number }) => ({
       name: new Date(d.ts).toLocaleTimeString(),
       value: d.spread_pct,
@@ -27,7 +27,7 @@ export function SpreadTracker({ pair }: Props) {
   return (
     <div className="card">
       <h3 className="text-xs font-mono text-white/40 mb-2">Spread History</h3>
-      <AreaChartComponent data={chartData} />
+      <AreaChartWidget data={chartData} dataKeys={['value']} height={120} />
     </div>
   );
 }
