@@ -5,11 +5,29 @@
 export const APP_NAME = 'HyperScope';
 export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '0.1.0';
 
-// API base URL
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-export const WS_URL =
-  process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8000';
+// API base URL — auto-fix missing protocol prefix
+function normalizeApiUrl(raw: string): string {
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  // If no protocol, assume https in production
+  return `https://${raw}`;
+}
+
+function normalizeWsUrl(raw: string): string {
+  if (raw.startsWith('ws://') || raw.startsWith('wss://')) return raw;
+  if (raw.startsWith('https://')) return raw.replace('https://', 'wss://');
+  if (raw.startsWith('http://')) return raw.replace('http://', 'ws://');
+  // If no protocol, assume wss in production
+  return `wss://${raw}`;
+}
+
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
+export const API_URL = normalizeApiUrl(rawApiUrl);
+
+// WS URL: use explicit env var, or derive from API URL
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL
+  ? normalizeWsUrl(process.env.NEXT_PUBLIC_WS_URL)
+  : normalizeWsUrl(rawApiUrl);
 
 // Protocol addresses
 export const AF_ADDRESS = '0xfefefefefefefefefefefefefefefefefefefefe';

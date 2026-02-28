@@ -21,11 +21,11 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── API Keys ────────────────────────────────────────────────────────────
+    # ── API Keys ─────────────────────────────────────────────────────────────────
     coinglass_api_key: str = Field(default="", alias="COINGLASS_API_KEY")
     coingecko_api_key: str = Field(default="", alias="COINGECKO_API_KEY")
 
-    # ── Hyperliquid ──────────────────────────────────────────────────────────
+    # ── Hyperliquid ──────────────────────────────────────────────────────────────
     hl_api_base: str = Field(
         default="https://api.hyperliquid.xyz",
         alias="HL_API_BASE",
@@ -37,30 +37,33 @@ class Settings(BaseSettings):
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     cors_origins: str = Field(
-        default="http://localhost:3000",
+        default="*",
         alias="CORS_ORIGINS",
     )
 
     def get_cors_origins(self) -> list[str]:
-        """Return CORS origins as a list (supports comma-separated string)."""
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        """Return CORS origins as a list (supports comma-separated string or '*')."""
+        raw = self.cors_origins.strip()
+        if raw == "*":
+            return ["*"]
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
-    # ── Redis (optional) ─────────────────────────────────────────────────────
+    # ── Redis (optional) ───────────────────────────────────────────────────────────
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
 
     # ── App ──────────────────────────────────────────────────────────────────
     app_version: str = Field(default="0.1.0", alias="APP_VERSION")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
-    # ── Protocol Addresses ───────────────────────────────────────────────────
+    # ── Protocol Addresses ─────────────────────────────────────────────────────────
     hlp_vault_address: str = "0xdfc24b077bc1425ad1dea75bcb6f8158e10df303"
     af_address: str = "0xfefefefefefefefefefefefefefefefefefefefe"
 
-    # ── HTTP Client Timeouts (seconds) ───────────────────────────────────────
+    # ── HTTP Client Timeouts (seconds) ───────────────────────────────────────────
     http_timeout: float = 15.0
     http_connect_timeout: float = 5.0
 
-    # ── Rate Limit Windows ───────────────────────────────────────────────────
+    # ── Rate Limit Windows ─────────────────────────────────────────────────────────
     hl_rate_limit_weight_per_min: int = 1200
     coinglass_rate_limit_per_min: int = 80
     coingecko_rate_limit_per_min: int = 500
