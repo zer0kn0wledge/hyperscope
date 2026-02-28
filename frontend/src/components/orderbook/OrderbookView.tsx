@@ -65,6 +65,8 @@ interface OrderbookViewProps {
   data: OrderbookSnapshot | null;
   isLoading?: boolean;
   levels?: number;
+  onLevelsChange?: (v: string) => void;
+  levelOptions?: { value: string; label: string }[];
 }
 
 export function OrderbookView({ data, isLoading, levels = 20 }: OrderbookViewProps) {

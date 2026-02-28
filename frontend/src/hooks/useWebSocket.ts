@@ -253,8 +253,8 @@ export function useAssetTradesWS(asset: string): Trade[] {
  * Hook for subscribing to large trades via WS.
  * Merges WS updates with initial REST data.
  */
-export function useLargeTradesWS(initialTrades: LargeTrade[]): LargeTrade[] {
-  const [wsTrades, setWsTrades] = useState<LargeTrade[]>([]);
+export function useLargeTradesWS(initialTrades: LargeTrade[] | Record<string, unknown>[]): (LargeTrade | Record<string, unknown>)[] {
+  const [wsTrades, setWsTrades] = useState<(LargeTrade | Record<string, unknown>)[]>([]);
 
   const handler = useCallback((data: unknown) => {
     const trade = data as LargeTrade;

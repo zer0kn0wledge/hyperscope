@@ -10,14 +10,17 @@ interface SpreadTrackerProps {
   pair: string;
 }
 
+type AnyRecord = Record<string, unknown>;
+
 export function SpreadTracker({ pair }: SpreadTrackerProps) {
   const [window, setWindow] = useState('1h');
-  const { data, isLoading } = useSpreadHistory(pair, window);
+  const { data: rawData, isLoading } = useSpreadHistory(pair, window);
 
-  const chartData = (data ?? []).map((d) => ({
-    time: d.time,
-    spread: d.spread,
-    spreadBps: d.spreadBps,
+  // Backend returns snake_case: spread_bps, spread_usd, timestamp
+  const chartData = ((rawData ?? []) as AnyRecord[]).map((d) => ({
+    time: Number(d.timestamp ?? d.time ?? 0),
+    spreadBps: Number(d.spread_bps ?? d.spreadBps ?? 0),
+    spread: Number(d.spread_usd ?? d.spread ?? 0),
   }));
 
   return (

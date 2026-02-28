@@ -34,7 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/traders', label: 'Traders', icon: Users },
   { href: '/protocol', label: 'Protocol', icon: Shield },
   {
-    href: '/compare',
+    href: '/compare/dex',
     label: 'Compare',
     icon: GitCompare,
     children: [

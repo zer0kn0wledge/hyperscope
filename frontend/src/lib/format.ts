@@ -151,6 +151,7 @@ export function pctChangeClass(value: number): string {
 /**
  * Format a token amount.
  */
-export function formatTokenAmount(value: number, symbol: string, decimals = 2): string {
-  return `${formatNumber(value, decimals)} ${symbol}`;
+export function formatTokenAmount(value: number, symbol?: string, decimals = 2): string {
+  const formatted = formatNumber(value, decimals);
+  return symbol ? `${formatted} ${symbol}` : formatted;
 }
