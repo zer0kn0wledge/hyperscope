@@ -1,161 +1,231 @@
 'use client';
 
-import { PageContainer, SectionHeader } from '@/components/ui/PageLayout';
-import { useDEXCompare } from '@/hooks/useHyperscope';
-import { KPICard } from '@/components/ui/KPICard';
-import { PieChart } from '@/components/charts/PieChart';
-import { VolumeChart } from '@/components/charts/VolumeChart';
+import { useMemo } from 'react';
+import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
+import { DataTable, Column } from '@/components/ui/DataTable';
+import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton';
+import { Badge } from '@/components/ui/Badge';
+import { useDEXComparison } from '@/hooks/useAPI';
 import { fmt } from '@/lib/format';
+import { CHART_COLORS } from '@/lib/constants';
+
+const DEX_META: Record<string, { color: string; label: string }> = {
+  hyperliquid: { color: '#00ff88', label: 'Hyperliquid' },
+  dydx: { color: '#6c63ff', label: 'dYdX' },
+  gmx: { color: '#2d9cdb', label: 'GMX' },
+  vertex: { color: '#f7931a', label: 'Vertex' },
+  drift: { color: '#e84393', label: 'Drift' },
+  aevo: { color: '#00bcd4', label: 'Aevo' },
+  paradex: { color: '#9c27b0', label: 'Paradex' },
+};
+
+function DEXCard({
+  name,
+  volume_24h,
+  oi,
+  market_share,
+  fee_rate,
+}: {
+  name: string;
+  volume_24h: number;
+  oi: number;
+  market_share: number;
+  fee_rate: number;
+}) {
+  const meta = DEX_META[name.toLowerCase()] ?? { color: '#e8e8e8', label: name };
+  return (
+    <div
+      className="card"
+      style={{
+        padding: '1.25rem',
+        borderColor: `${meta.color}22`,
+        transition: 'border-color 0.2s',
+      }}
+      onMouseEnter={(e) => ((e.currentTarget as HTMLDivElement).style.borderColor = `${meta.color}44`)}
+      onMouseLeave={(e) => ((e.currentTarget as HTMLDivElement).style.borderColor = `${meta.color}22`)}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1rem' }}>
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: meta.color,
+            boxShadow: `0 0 8px ${meta.color}88`,
+          }}
+        />
+        <span
+          style={{
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: meta.color,
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          {meta.label}
+        </span>
+        {name.toLowerCase() === 'hyperliquid' && (
+          <Badge variant="neon" size="xs">HL</Badge>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        <div>
+          <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>24h Vol</div>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace' }}>{fmt.usd(volume_24h)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Open Int.</div>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace' }}>{fmt.usd(oi)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mkt Share</div>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: meta.color, fontFamily: 'JetBrains Mono, monospace' }}>{(market_share * 100).toFixed(1)}%</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Fee Rate</div>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace' }}>{(fee_rate * 100).toFixed(3)}%</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DEXComparePage() {
-  const { data, isLoading, error } = useDEXCompare();
+  const { data, isLoading, error } = useDEXComparison();
 
-  if (isLoading)
-    return (
-      <PageContainer>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-neon-green animate-pulse font-mono text-sm">
-            fetching DEX data...
+  const tableColumns: Column[] = [
+    {
+      key: 'exchange',
+      label: 'Exchange',
+      sortable: true,
+      render: (val: string) => {
+        const meta = DEX_META[val.toLowerCase()] ?? { color: '#e8e8e8', label: val };
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
+            <span style={{ color: '#e8e8e8' }}>{meta.label}</span>
+            {val.toLowerCase() === 'hyperliquid' && <Badge variant="neon" size="xs">HL</Badge>}
           </div>
+        );
+      },
+    },
+    {
+      key: 'volume_24h',
+      label: '24h Volume',
+      align: 'right',
+      sortable: true,
+      render: (val: number) => fmt.usd(val),
+    },
+    {
+      key: 'oi',
+      label: 'Open Interest',
+      align: 'right',
+      sortable: true,
+      render: (val: number) => fmt.usd(val),
+    },
+    {
+      key: 'market_share',
+      label: 'Market Share',
+      align: 'right',
+      sortable: true,
+      render: (val: number) => (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
+          <div
+            style={{
+              width: `${Math.max(val * 100 * 1.5, 4)}px`,
+              height: '4px',
+              background: CHART_COLORS.neon,
+              borderRadius: '2px',
+              opacity: 0.7,
+            }}
+          />
+          <span style={{ color: CHART_COLORS.neon, fontFamily: 'JetBrains Mono, monospace' }}>
+            {(val * 100).toFixed(1)}%
+          </span>
         </div>
-      </PageContainer>
-    );
-
-  if (error || !data)
-    return (
-      <PageContainer>
-        <div className="text-red-400 font-mono text-sm">
-          error loading DEX compare data
+      ),
+    },
+    {
+      key: 'fee_rate',
+      label: 'Fee Rate',
+      align: 'right',
+      sortable: true,
+      render: (val: number) => (
+        <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{(val * 100).toFixed(3)}%</span>
+      ),
+    },
+    {
+      key: 'chains',
+      label: 'Chain(s)',
+      render: (val: string[]) => (
+        <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+          {(val ?? []).map((c) => (
+            <Badge key={c} variant="ghost" size="xs">{c}</Badge>
+          ))}
         </div>
-      </PageContainer>
-    );
+      ),
+    },
+  ];
 
-  type ExchangeData = {
-    oi?: number;
-    volume_24h?: number;
-    num_markets?: number;
-    num_traders?: number;
-    funding_rate?: number;
-  };
-
-  const exchanges = data as Record<string, ExchangeData>;
-  const rows = Object.entries(exchanges).map(([name, d]) => ({
-    name,
-    ...d,
-  }));
-
-  rows.sort((a, b) => (b.oi ?? 0) - (a.oi ?? 0));
-
-  const oiPie = rows
-    .filter((r) => r.oi)
-    .map((r) => ({ name: r.name, value: r.oi as number }));
-
-  const volPie = rows
-    .filter((r) => r.volume_24h)
-    .map((r) => ({ name: r.name, value: r.volume_24h as number }));
-
-  // Totals
-  const totalOI = rows.reduce((s, r) => s + (r.oi ?? 0), 0);
-  const totalVol = rows.reduce((s, r) => s + (r.volume_24h ?? 0), 0);
-  const totalMarkets = rows.reduce((s, r) => s + (r.num_markets ?? 0), 0);
-  const totalTraders = rows.reduce((s, r) => s + (r.num_traders ?? 0), 0);
-
-  const volHistory = rows
-    .filter((r) => r.volume_24h != null)
-    .map((r) => ({
-      name: r.name.replace('_', ' '),
-      value: r.volume_24h as number,
-    }));
+  const cards = useMemo(() => {
+    if (!data) return [];
+    return (data as any[]).slice(0, 6);
+  }, [data]);
 
   return (
     <PageContainer>
-      <SectionHeader
-        title="DEX Compare"
-        subtitle="On-chain perpetual exchanges — head-to-head metrics"
-      />
-
-      {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <KPICard label="Total OI" value={fmt.usd(totalOI)} />
-        <KPICard label="24h Volume" value={fmt.usd(totalVol)} />
-        <KPICard label="Total Markets" value={fmt.num(totalMarkets)} />
-        <KPICard label="Total Traders" value={fmt.num(totalTraders)} />
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h1
+          style={{
+            fontSize: '1.25rem',
+            fontWeight: 700,
+            color: '#e8e8e8',
+            margin: '0 0 0.375rem',
+            letterSpacing: '-0.02em',
+            fontFamily: 'Inter, sans-serif',
+          }}
+        >
+          DEX Comparison
+        </h1>
+        <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.35)', margin: 0, fontFamily: 'Inter, sans-serif' }}>
+          Hyperliquid vs. competing decentralized perpetual exchanges
+        </p>
       </div>
 
-      {/* Table */}
-      <div className="card mb-6 overflow-x-auto">
-        <table className="w-full text-sm font-mono">
-          <thead>
-            <tr className="border-b border-white/5">
-              {[
-                'Exchange',
-                'Open Interest',
-                '24h Volume',
-                'Markets',
-                'Traders',
-                'Funding',
-              ].map((h) => (
-                <th
-                  key={h}
-                  className="px-3 py-2 text-left text-white/40 font-normal"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr
-                key={row.name}
-                className="border-b border-white/5 hover:bg-white/2"
-              >
-                <td className="px-3 py-2 text-neon-green font-semibold capitalize">
-                  {row.name.replace(/_/g, ' ')}
-                </td>
-                <td className="px-3 py-2 text-white/80">{fmt.usd(row.oi)}</td>
-                <td className="px-3 py-2 text-white/80">
-                  {fmt.usd(row.volume_24h)}
-                </td>
-                <td className="px-3 py-2 text-white/60">
-                  {row.num_markets ?? '—'}
-                </td>
-                <td className="px-3 py-2 text-white/60">
-                  {row.num_traders != null ? fmt.num(row.num_traders) : '—'}
-                </td>
-                <td className="px-3 py-2 text-white/60">
-                  {row.funding_rate != null
-                    ? `${(row.funding_rate * 100).toFixed(4)}%`
-                    : '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Charts */}
-      <div className="grid md:grid-cols-2 gap-4 mb-4">
-        {oiPie.length > 0 && (
-          <div className="card">
-            <h3 className="text-sm font-mono text-white/40 mb-3">OI Distribution</h3>
-            <PieChart data={oiPie} />
-          </div>
-        )}
-        {volPie.length > 0 && (
-          <div className="card">
-            <h3 className="text-sm font-mono text-white/40 mb-3">Volume Distribution</h3>
-            <PieChart data={volPie} />
-          </div>
-        )}
-      </div>
-
-      {volHistory.length > 0 && (
-        <div className="card">
-          <h3 className="text-sm font-mono text-white/40 mb-3">24h Volume Comparison</h3>
-          <VolumeChart data={volHistory} />
+      {/* Cards */}
+      {isLoading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+          {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+          {cards.map((d: any) => (
+            <DEXCard key={d.exchange} {...d} />
+          ))}
         </div>
       )}
+
+      {/* Table */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '1.25rem 1.25rem 0' }}>
+          <SectionHeader title="Full Comparison Table" subtitle="All tracked DEX perpetual platforms" />
+        </div>
+        {isLoading ? (
+          <SkeletonTable rows={7} cols={6} />
+        ) : error ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#ff4d4d', fontSize: '0.8125rem' }}>
+            Failed to load DEX data
+          </div>
+        ) : (
+          <DataTable
+            columns={tableColumns}
+            data={(data as any[]) ?? []}
+            rowKey={(row) => row.exchange}
+            emptyMessage="No DEX data available"
+          />
+        )}
+      </div>
     </PageContainer>
   );
 }

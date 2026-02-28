@@ -2,13 +2,23 @@
 
 import { QueryProvider } from '@/providers/QueryProvider';
 import { Sidebar } from '@/components/layout/Sidebar';
+import { MouseGlow } from '@/components/layout/MouseGlow';
 
 export function LayoutClient({ children }: { children: React.ReactNode }) {
   return (
     <QueryProvider>
-      <div className="flex h-screen bg-bg-primary overflow-hidden">
+      <div className="flex min-h-screen bg-black relative">
+        {/* Mouse follow glow — behind everything */}
+        <MouseGlow />
+
+        {/* Sidebar */}
         <Sidebar />
-        <main className="flex-1 overflow-y-auto">
+
+        {/* Main content area */}
+        <main
+          className="flex-1 min-w-0 relative z-10"
+          style={{ background: 'transparent' }}
+        >
           {children}
         </main>
       </div>

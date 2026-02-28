@@ -4,61 +4,278 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── CSS Variables ──────────────────────────────────────────────────────── */
 :root {
-  --neon-green: #00ff88;
-  --bg-primary: #0a0a0a;
-  --bg-card: #111111;
-  --bg-card-hover: #161616;
-  --border-color: rgba(255, 255, 255, 0.06);
+  --neon: #00ff88;
+  --neon-dim: #00cc6a;
+  --bg: #000000;
+  --bg-card: #0a0a0a;
+  --bg-surface: #060606;
+  --border: rgba(0, 255, 136, 0.08);
+  --border-active: rgba(0, 255, 136, 0.25);
+  --glow: rgba(0, 255, 136, 0.15);
+  --glow-soft: rgba(0, 255, 136, 0.05);
+  --text-primary: #e8e8e8;
+  --text-secondary: rgba(255, 255, 255, 0.5);
+  --text-muted: rgba(255, 255, 255, 0.3);
+  --red: #ff4d4d;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: #000000;
+  color-scheme: dark;
 }
 
 body {
-  background-color: var(--bg-primary);
-  color: #e0e0e0;
-  font-family: 'Inter', sans-serif;
+  background: #000000;
+  color: #e8e8e8;
+  font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  overflow-x: hidden;
 }
 
-/* Card component */
-.card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 1rem;
+::selection {
+  background: rgba(0, 255, 136, 0.2);
+  color: #00ff88;
 }
 
-.card-hover:hover {
-  background: var(--bg-card-hover);
-  border-color: rgba(0, 255, 136, 0.15);
-  transition: all 0.15s ease;
-}
-
-/* Scrollbar */
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 255, 136, 0.2);
+  background: rgba(0, 255, 136, 0.25);
   border-radius: 2px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 255, 136, 0.4);
+  background: rgba(0, 255, 136, 0.45);
 }
 
-/* Neon glow utility */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 136, 0.25) transparent;
+}
+
+/* ─── Card ───────────────────────────────────────────────────────────────── */
+.card {
+  background: #0a0a0a;
+  border: 1px solid rgba(0, 255, 136, 0.08);
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+  border-color: rgba(0, 255, 136, 0.2);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.05);
+}
+
+/* ─── Neon Effects ───────────────────────────────────────────────────────── */
 .neon-glow {
-  text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+  text-shadow:
+    0 0 8px rgba(0, 255, 136, 0.8),
+    0 0 20px rgba(0, 255, 136, 0.4),
+    0 0 40px rgba(0, 255, 136, 0.2);
 }
 
-/* Table styles */
+.neon-border-glow {
+  box-shadow:
+    0 0 15px rgba(0, 255, 136, 0.1),
+    inset 0 0 15px rgba(0, 255, 136, 0.03);
+}
+
+.neon-text {
+  color: #00ff88;
+}
+
+/* ─── Tables ─────────────────────────────────────────────────────────────── */
 table {
+  width: 100%;
   border-collapse: collapse;
 }
 
-tr:last-child td {
-  border-bottom: none;
+thead tr {
+  border-bottom: 1px solid rgba(0, 255, 136, 0.08);
+}
+
+tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.15s ease;
+}
+
+tbody tr:hover {
+  background: rgba(0, 255, 136, 0.03);
+}
+
+th {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.3);
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  white-space: nowrap;
+  user-select: none;
+}
+
+td {
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.75rem;
+  color: #e8e8e8;
+}
+
+/* ─── Monospace Data ─────────────────────────────────────────────────────── */
+.font-mono,
+[class*='font-mono'] {
+  font-feature-settings: 'tnum' 1, 'kern' 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Interactive Elements ───────────────────────────────────────────────── */
+button,
+a,
+[role='button'],
+input,
+select {
+  transition: all 0.15s ease;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 1px solid rgba(0, 255, 136, 0.5);
+  outline-offset: 2px;
+}
+
+/* ─── Recharts Custom Styling ────────────────────────────────────────────── */
+.recharts-tooltip-wrapper {
+  z-index: 1000 !important;
+}
+
+.recharts-default-tooltip {
+  background: #0a0a0a !important;
+  border: 1px solid rgba(0, 255, 136, 0.2) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 255, 136, 0.05) !important;
+}
+
+.recharts-tooltip-label {
+  color: rgba(255, 255, 255, 0.5) !important;
+  font-size: 0.75rem !important;
+  margin-bottom: 4px !important;
+}
+
+.recharts-tooltip-item {
+  color: #00ff88 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.8125rem !important;
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.04) !important;
+}
+
+.recharts-text {
+  fill: rgba(255, 255, 255, 0.4) !important;
+  font-size: 0.6875rem !important;
+}
+
+/* ─── Positive / Negative Colors ────────────────────────────────────────── */
+.text-positive {
+  color: #00ff88;
+}
+
+.text-negative {
+  color: #ff4d4d;
+}
+
+/* ─── Page transitions ───────────────────────────────────────────────────── */
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ─── Input Styling ──────────────────────────────────────────────────────── */
+input[type='text'],
+input[type='search'],
+input[type='number'] {
+  background: #060606;
+  border: 1px solid rgba(0, 255, 136, 0.1);
+  border-radius: 8px;
+  color: #e8e8e8;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8125rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+}
+
+input[type='text']:focus,
+input[type='search']:focus,
+input[type='number']:focus {
+  border-color: rgba(0, 255, 136, 0.35);
+  box-shadow: 0 0 0 2px rgba(0, 255, 136, 0.08);
+  outline: none;
+}
+
+input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* ─── Thin dividers ──────────────────────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: rgba(0, 255, 136, 0.06);
+  width: 100%;
+}
+
+/* ─── Glow pulse animation for status dot ───────────────────────────────── */
+@keyframes live-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.6);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(0, 255, 136, 0);
+    opacity: 0.8;
+  }
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00ff88;
+  animation: live-pulse 2s ease-in-out infinite;
 }

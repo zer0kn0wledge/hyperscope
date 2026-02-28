@@ -1,10 +1,11 @@
 'use client';
-
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-export default function ComparePage() {
+export default function CompareIndex() {
   const router = useRouter();
-  useEffect(() => { router.replace('/compare/dex'); }, [router]);
+  useEffect(() => {
+    router.replace('/compare/dex');
+  }, [router]);
   return null;
 }
