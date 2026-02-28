@@ -22,25 +22,23 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[HyperScope] Component error:', error, errorInfo);
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ErrorBoundary]', error, info);
   }
 
   render() {
     if (this.state.hasError) {
-      return this.props.fallback ?? (
-        <div className="flex flex-col items-center justify-center min-h-[200px] text-text-muted">
-          <p className="text-sm mb-2">Something went wrong loading this section.</p>
-          <button
-            onClick={() => this.setState({ hasError: false })}
-            className="text-xs text-accent-cyan hover:underline"
-          >
-            Try again
-          </button>
-        </div>
+      return (
+        this.props.fallback ?? (
+          <div className="p-4 font-mono text-sm text-red-400">
+            <p>Something went wrong.</p>
+            {this.state.error && (
+              <p className="mt-1 text-xs text-white/40">{this.state.error.message}</p>
+            )}
+          </div>
+        )
       );
     }
-
     return this.props.children;
   }
 }

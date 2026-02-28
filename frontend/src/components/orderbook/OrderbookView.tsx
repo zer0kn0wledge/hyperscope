@@ -1,178 +1,84 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-import type { OrderbookSnapshot, OrderbookLevel } from '@/lib/types';
-import { formatPrice, formatUSD } from '@/lib/format';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { fmt } from '@/lib/format';
 
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
+interface Props {
+  bids: [number, number][];
+  asks: [number, number][];
 }
 
-interface OrderbookRowProps {
-  level: OrderbookLevel;
-  side: 'bid' | 'ask';
-  maxSize: number;
-  highlight: boolean;
+function getCumulative(levels: [number, number][]) {
+  let cum = 0;
+  return levels.map(([price, size]) => {
+    cum += size;
+    return { price, size, cum };
+  });
 }
 
-function OrderbookRow({ level, side, maxSize, highlight }: OrderbookRowProps) {
-  const barWidth = maxSize > 0 ? (level.size / maxSize) * 100 : 0;
-  const isBid = side === 'bid';
+export function OrderbookView({ bids, asks }: Props) {
+  const bidsWithCum = getCumulative(bids);
+  const asksWithCum = getCumulative(asks);
+  const maxBidCum = bidsWithCum.at(-1)?.cum ?? 1;
+  const maxAskCum = asksWithCum.at(-1)?.cum ?? 1;
+
+  const Row = ({
+    price,
+    size,
+    cum,
+    maxCum,
+    side,
+  }: {
+    price: number;
+    size: number;
+    cum: number;
+    maxCum: number;
+    side: 'bid' | 'ask';
+  }) => {
+    const pct = (cum / maxCum) * 100;
+    const bg = side === 'bid' ? 'rgba(0,255,136,0.06)' : 'rgba(255,77,77,0.06)';
+    const text = side === 'bid' ? 'text-neon-green' : 'text-red-400';
+
+    return (
+      <div
+        className="relative flex justify-between text-xs font-mono py-0.5 px-3"
+        style={{
+          background: `linear-gradient(to ${side === 'bid' ? 'right' : 'left'}, ${bg} ${pct}%, transparent ${pct}%)`,
+        }}
+      >
+        <span className={text}>{fmt.price(price)}</span>
+        <span className="text-white/60">{fmt.num(size, 4)}</span>
+        <span className="text-white/30">{fmt.num(cum, 2)}</span>
+      </div>
+    );
+  };
 
   return (
-    <tr
-      className={cn(
-        'relative text-xs number transition-all duration-75',
-        highlight && (isBid ? 'animate-flash-green' : 'animate-flash-red')
-      )}
-    >
-      {/* Bar background */}
-      <td colSpan={3} className="absolute inset-0 pointer-events-none">
-        <div
-          className={cn(
-            'absolute top-0 h-full opacity-10',
-            isBid ? 'right-0 bg-accent-green' : 'left-0 bg-accent-red'
-          )}
-          style={{ width: `${barWidth}%` }}
-        />
-      </td>
+    <div className="card">
+      <div className="grid grid-cols-3 text-xs font-mono text-white/30 px-3 py-1 border-b border-white/5 mb-1">
+        <span>Price</span>
+        <span className="text-right">Size</span>
+        <span className="text-right">Cumulative</span>
+      </div>
 
-      {/* Price */}
-      <td className={cn(
-        'py-0.5 px-3 text-right font-medium',
-        isBid ? 'text-accent-green' : 'text-accent-red'
-      )}>
-        {formatPrice(level.price)}
-      </td>
-
-      {/* Size */}
-      <td className="py-0.5 px-3 text-right text-text-secondary">
-        {level.size.toFixed(4)}
-      </td>
-
-      {/* Total */}
-      <td className="py-0.5 px-3 text-right text-text-tertiary">
-        {formatUSD(level.total)}
-      </td>
-    </tr>
-  );
-}
-
-interface OrderbookViewProps {
-  data: OrderbookSnapshot | null;
-  isLoading?: boolean;
-  levels?: number;
-  onLevelsChange?: (v: string) => void;
-  levelOptions?: { value: string; label: string }[];
-}
-
-export function OrderbookView({ data, isLoading, levels = 20 }: OrderbookViewProps) {
-  const [prevData, setPrevData] = useState<OrderbookSnapshot | null>(null);
-  const [updatedPrices, setUpdatedPrices] = useState<Set<number>>(new Set());
-
-  useEffect(() => {
-    if (!data || !prevData) {
-      setPrevData(data);
-      return;
-    }
-
-    const changed = new Set<number>();
-    const prevBids = new Map(prevData.bids.map((b) => [b.price, b.size]));
-    const prevAsks = new Map(prevData.asks.map((a) => [a.price, a.size]));
-
-    data.bids.forEach((b) => {
-      if (prevBids.get(b.price) !== b.size) changed.add(b.price);
-    });
-    data.asks.forEach((a) => {
-      if (prevAsks.get(a.price) !== a.size) changed.add(a.price);
-    });
-
-    if (changed.size > 0) {
-      setUpdatedPrices(changed);
-      setTimeout(() => setUpdatedPrices(new Set()), 300);
-    }
-
-    setPrevData(data);
-  }, [data]);
-
-  if (isLoading) {
-    return (
-      <div className="space-y-1">
-        {Array.from({ length: levels }).map((_, i) => (
-          <div key={i} className="flex justify-between px-3 py-0.5">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-3 w-20" />
-          </div>
+      {/* Asks (reversed, so lowest ask is closest to mid) */}
+      <div className="flex flex-col-reverse">
+        {asksWithCum.map((row, i) => (
+          <Row key={i} {...row} maxCum={maxAskCum} side="ask" />
         ))}
       </div>
-    );
-  }
 
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center h-40 text-text-muted text-sm">
-        No orderbook data
-      </div>
-    );
-  }
-
-  const bids = data.bids.slice(0, levels);
-  const asks = data.asks.slice(0, levels).reverse();
-  const maxBidSize = Math.max(...bids.map((b) => b.size), 1);
-  const maxAskSize = Math.max(...asks.map((a) => a.size), 1);
-
-  return (
-    <div className="font-mono text-xs">
-      {/* Header */}
-      <div className="grid grid-cols-3 text-text-muted text-[10px] uppercase tracking-wider px-3 py-2 border-b border-border-subtle">
-        <span className="text-right">Price (USD)</span>
-        <span className="text-right">Size</span>
-        <span className="text-right">Total</span>
+      {/* Spread row */}
+      <div className="py-1 px-3 text-center text-xs font-mono text-white/20 border-y border-white/5">
+        spread
       </div>
 
-      {/* Asks (top, reversed) */}
-      <table className="w-full">
-        <tbody>
-          {asks.map((ask) => (
-            <OrderbookRow
-              key={ask.price}
-              level={ask}
-              side="ask"
-              maxSize={maxAskSize}
-              highlight={updatedPrices.has(ask.price)}
-            />
-          ))}
-        </tbody>
-      </table>
-
-      {/* Mid price spread */}
-      <div className="flex items-center justify-between px-3 py-2 bg-bg-tertiary border-y border-border-subtle">
-        <span className="number text-sm font-bold text-text-primary">
-          ${formatPrice(data.midPrice)}
-        </span>
-        <span className="text-text-tertiary text-xs">
-          Spread: ${formatPrice(data.spread)} ({data.spreadBps.toFixed(1)} bps)
-        </span>
+      {/* Bids */}
+      <div className="flex flex-col">
+        {bidsWithCum.map((row, i) => (
+          <Row key={i} {...row} maxCum={maxBidCum} side="bid" />
+        ))}
       </div>
-
-      {/* Bids (bottom) */}
-      <table className="w-full">
-        <tbody>
-          {bids.map((bid) => (
-            <OrderbookRow
-              key={bid.price}
-              level={bid}
-              side="bid"
-              maxSize={maxBidSize}
-              highlight={updatedPrices.has(bid.price)}
-            />
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

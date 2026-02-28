@@ -1,36 +1,34 @@
 'use client';
 
-import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 
-interface SparklineProps {
+interface Props {
   data: number[];
   color?: string;
   height?: number;
-  strokeWidth?: number;
 }
 
-export function Sparkline({
-  data,
-  color = '#00D1FF',
-  height = 48,
-  strokeWidth = 1.5,
-}: SparklineProps) {
-  if (!data || data.length < 2) {
-    return <div style={{ height }} className="bg-bg-tertiary/30 rounded" />;
-  }
-
-  const chartData = data.map((value, i) => ({ i, value }));
-
+export function Sparkline({ data, color = '#00ff88', height = 40 }: Props) {
+  const chartData = data.map((v, i) => ({ i, v }));
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={chartData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+      <LineChart data={chartData}>
         <Line
           type="monotone"
-          dataKey="value"
+          dataKey="v"
           stroke={color}
-          strokeWidth={strokeWidth}
+          strokeWidth={1.5}
           dot={false}
           isAnimationActive={false}
+        />
+        <Tooltip
+          contentStyle={{
+            background: '#111',
+            border: '1px solid rgba(0,255,136,0.2)',
+            borderRadius: 4,
+            fontSize: 10,
+            fontFamily: 'monospace',
+          }}
         />
       </LineChart>
     </ResponsiveContainer>

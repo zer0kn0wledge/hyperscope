@@ -2,127 +2,77 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  LayoutDashboard,
-  BarChart2,
-  BookOpen,
-  Users,
-  Shield,
-  GitCompare,
-  Settings,
-  ChevronRight,
-  Zap,
-} from 'lucide-react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import Image from 'next/image';
 
-function cn(...classes: (string | undefined | null | boolean)[]) {
-  return twMerge(clsx(classes));
-}
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ElementType;
-  children?: { href: string; label: string }[];
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Overview', icon: LayoutDashboard },
-  { href: '/markets', label: 'Markets', icon: BarChart2 },
-  { href: '/orderbook', label: 'Orderbook', icon: BookOpen },
-  { href: '/traders', label: 'Traders', icon: Users },
-  { href: '/protocol', label: 'Protocol', icon: Shield },
-  {
-    href: '/compare/dex',
-    label: 'Compare',
-    icon: GitCompare,
-    children: [
-      { href: '/compare/dex', label: 'DEX' },
-      { href: '/compare/cex', label: 'CEX' },
-    ],
-  },
-  { href: '/settings', label: 'Settings', icon: Settings },
+const nav = [
+  { href: '/', label: 'Overview' },
+  { href: '/markets/BTC', label: 'Markets' },
+  { href: '/compare', label: 'Compare' },
+  { href: '/orderbook/BTC-PERP', label: 'Orderbook' },
+  { href: '/traders', label: 'Traders' },
+  { href: '/protocol', label: 'Protocol' },
 ];
 
-function NavLink({ item, depth = 0 }: { item: NavItem; depth?: number }) {
-  const pathname = usePathname();
-  const isActive =
-    item.href === '/'
-      ? pathname === '/'
-      : pathname.startsWith(item.href);
-  const hasChildren = item.children && item.children.length > 0;
-
-  return (
-    <div>
-      <Link
-        href={item.href}
-        className={cn(
-          'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all group',
-          depth === 0 ? 'font-medium' : 'font-normal text-xs pl-9',
-          isActive
-            ? 'bg-bg-hover text-accent-cyan'
-            : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
-        )}
-      >
-        {depth === 0 && (
-          <item.icon
-            className={cn(
-              'w-4 h-4 shrink-0 transition-colors',
-              isActive ? 'text-accent-cyan' : 'text-text-muted group-hover:text-text-secondary'
-            )}
-          />
-        )}
-        <span className="flex-1">{item.label}</span>
-        {hasChildren && <ChevronRight className="w-3 h-3 text-text-muted" />}
-      </Link>
-      {hasChildren && isActive && (
-        <div className="mt-0.5 space-y-0.5">
-          {item.children!.map((child) => (
-            <Link
-              key={child.href}
-              href={child.href}
-              className={cn(
-                'flex items-center gap-2 py-1.5 pl-10 pr-3 rounded-md text-xs transition-colors',
-                pathname === child.href
-                  ? 'text-accent-cyan bg-bg-hover'
-                  : 'text-text-muted hover:text-text-secondary hover:bg-bg-hover'
-              )}
-            >
-              <span className="w-1 h-1 rounded-full bg-current" />
-              {child.label}
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function Sidebar() {
+  const pathname = usePathname();
+
   return (
-    <aside className="w-52 shrink-0 flex flex-col bg-bg-secondary border-r border-bg-border overflow-hidden">
+    <aside className="w-52 shrink-0 flex flex-col bg-[#0d0d0d] border-r border-white/5 h-screen">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-bg-border">
-        <div className="w-7 h-7 rounded-lg bg-accent-cyan/10 flex items-center justify-center">
-          <Zap className="w-4 h-4 text-accent-cyan" />
-        </div>
-        <div>
-          <p className="font-bold text-text-primary text-sm leading-none">HyperScope</p>
-          <p className="text-2xs text-text-muted mt-0.5">Hyperliquid Analytics</p>
+      <div className="px-4 py-5 border-b border-white/5">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/favicon.svg"
+            alt="Hyperscope"
+            width={28}
+            height={28}
+            className="shrink-0"
+          />
+          <div>
+            <div className="text-white font-semibold text-sm leading-none">hyperscope</div>
+            <div className="text-neon-green text-xs font-mono leading-tight mt-0.5 opacity-70">
+              hl analytics
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map((item) => (
-          <NavLink key={item.href} item={item} />
-        ))}
+      {/* Nav */}
+      <nav className="flex-1 px-2 py-3 space-y-0.5">
+        {nav.map(({ href, label }) => {
+          const active =
+            href === '/'
+              ? pathname === '/'
+              : pathname.startsWith(href.split('/')[1] ? `/${href.split('/')[1]}` : href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`flex items-center px-3 py-2 rounded text-sm font-mono transition-colors ${
+                active
+                  ? 'bg-neon-green/8 text-neon-green'
+                  : 'text-white/40 hover:text-white/70 hover:bg-white/3'
+              }`}
+            >
+              {label}
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-bg-border">
-        <p className="text-2xs text-text-muted">Built by Zero Knowledge</p>
+      <div className="px-4 py-3 border-t border-white/5">
+        <a
+          href="https://x.com/0xhyperscope"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-white/30 hover:text-white/60 transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.259 5.631 5.905-5.631zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+          <span className="text-xs">@0xhyperscope</span>
+        </a>
       </div>
     </aside>
   );
