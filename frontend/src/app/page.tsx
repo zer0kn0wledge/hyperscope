@@ -33,42 +33,58 @@ const TRADE_COLUMNS: Column<AnyRecord>[] = [
   {
     key: 'side',
     header: 'Side',
-    render: (v) => (
-      <Badge variant={String(v) === 'buy' ? 'buy' : 'sell'}>
-        {String(v).toUpperCase()}
-      </Badge>
-    ),
+    render: (v) => {
+      const side = String(v ?? '').toLowerCase();
+      if (side !== 'buy' && side !== 'sell') return <span className="text-text-muted">-</span>;
+      return (
+        <Badge variant={side === 'buy' ? 'buy' : 'sell'}>
+          {side.toUpperCase()}
+        </Badge>
+      );
+    },
   },
   {
     key: 'coin',
     header: 'Asset',
-    render: (v) => <span className="font-medium text-text-primary">{String(v)}</span>,
+    render: (v) => <span className="font-medium text-text-primary">{String(v ?? '-')}</span>,
   },
   {
     key: 'price',
     header: 'Price',
     align: 'right',
-    render: (v) => <span className="number">${formatPrice(Number(v))}</span>,
+    render: (v) => {
+      const num = Number(v);
+      return <span className="number">{isFinite(num) && num > 0 ? `$${formatPrice(num)}` : '-'}</span>;
+    },
   },
   {
     key: 'size',
     header: 'Size',
     align: 'right',
-    render: (v) => <span className="number">{Number(v).toFixed(4)}</span>,
+    render: (v) => {
+      const num = Number(v);
+      return <span className="number">{isFinite(num) ? num.toFixed(4) : '-'}</span>;
+    },
   },
   {
     key: 'notional',
     header: 'Notional',
     align: 'right',
-    render: (v) => <span className="number">{formatUSD(Number(v))}</span>,
+    render: (v) => {
+      const num = Number(v);
+      return <span className="number">{isFinite(num) && num > 0 ? formatUSD(num) : '-'}</span>;
+    },
   },
   {
     key: 'time',
     header: 'Time',
     align: 'right',
-    render: (v) => (
-      <span className="number text-text-secondary">{formatDate(Number(v))}</span>
-    ),
+    render: (v) => {
+      const num = Number(v);
+      return (
+        <span className="number text-text-secondary">{isFinite(num) && num > 0 ? formatDate(num) : '-'}</span>
+      );
+    },
   },
 ];
 

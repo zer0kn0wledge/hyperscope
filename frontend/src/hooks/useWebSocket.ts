@@ -258,12 +258,19 @@ export function useLargeTradesWS(initialTrades: LargeTrade[] | Record<string, un
 
   const handler = useCallback((data: unknown) => {
     const trade = data as LargeTrade;
-    setWsTrades((prev) => [trade, ...prev].slice(0, 200));
+    // Validate that the trade has essential fields before adding
+    if (trade && trade.coin && trade.price && Number(trade.price) > 0 && trade.time) {
+      setWsTrades((prev) => [trade, ...prev].slice(0, 200));
+    }
   }, []);
 
   useWebSocket<LargeTrade>('large-trades', handler);
 
-  // Merge WS trades with initial data
-  const merged = [...wsTrades, ...initialTrades].slice(0, 200);
+  // Filter initial trades for validity, then merge with WS trades
+  const validInitial = initialTrades.filter((t) => {
+    const rec = t as Record<string, unknown>;
+    return rec.coin && rec.price && Number(rec.price) > 0;
+  });
+  const merged = [...wsTrades, ...validInitial].slice(0, 200);
   return merged;
 }
