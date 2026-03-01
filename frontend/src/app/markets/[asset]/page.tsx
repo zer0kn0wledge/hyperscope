@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Select } from '@/components/ui/Select';
 import { useAssetCandles, useAllAssets, useAssetOIHistory, useAssetFundingHistory } from '@/hooks/useAPI';
 import { fmt } from '@/lib/format';
+// CANDLE_INTERVALS and CandleInterval are now exported from constants.ts (fix #1)
 import { CHART_COLORS, CANDLE_INTERVALS, CandleInterval } from '@/lib/constants';
 
 function PriceTooltip({ active, payload, label }: any) {
@@ -56,9 +57,9 @@ export default function AssetPage() {
   const { data: oiHistory, isLoading: oiLoading } = useAssetOIHistory(asset);
   const { data: fundingHistory, isLoading: fundingLoading } = useAssetFundingHistory(asset);
 
-  // Find current asset info
+  // assetsData is typed as any[] from marketsAPI.all() — safely find current asset
   const assetInfo = useMemo(() => {
-    if (!assetsData) return null;
+    if (!assetsData || !Array.isArray(assetsData)) return null;
     return (assetsData as any[]).find((a) => a.asset === asset) ?? null;
   }, [assetsData, asset]);
 
@@ -241,7 +242,7 @@ export default function AssetPage() {
               data={fundingChartData}
               dataKey="rate"
               height={200}
-              color={CHART_COLORS.purple}
+              color={CHART_COLORS.neon}
               formatY={(v) => `${(v * 100).toFixed(4)}%`}
             />
           )}

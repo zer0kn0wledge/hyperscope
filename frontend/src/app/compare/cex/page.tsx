@@ -51,11 +51,47 @@ function CustomTooltip({ active, payload, label }: any) {
 }
 
 export default function CEXComparePage() {
-  const { data, isLoading, error } = useCEXComparison();
+  const { data: rawData, isLoading, error } = useCEXComparison();
+
+  // API returns:
+  // { benchmark: { exchange, type, total_volume_24h_usd, total_oi_usd, perpetual_pairs },
+  //   exchanges: [{ exchange, type, total_volume_24h_usd, total_oi_usd, perpetual_pairs,
+  //                 volume_share_pct, oi_share_pct }],
+  //   timestamp }
+  // Normalise to a flat list that includes the benchmark (Hyperliquid) + CEX exchanges
+  const allRows: any[] = useMemo(() => {
+    if (!rawData) return [];
+    const raw = rawData as any;
+
+    const normalise = (item: any) => ({
+      exchange: item.exchange ?? '',
+      type: item.type ?? '',
+      // Normalise volume/OI field names
+      volume_24h: item.total_volume_24h_usd ?? item.volume_24h ?? 0,
+      oi: item.total_oi_usd ?? item.oi ?? 0,
+      perp_pairs: item.perpetual_pairs ?? item.perp_pairs ?? null,
+      // volume_share_pct comes as a percentage (e.g. 55.3) → convert to 0–1 fraction for render
+      market_share: item.volume_share_pct != null ? item.volume_share_pct / 100 : null,
+      maker_fee: item.maker_fee ?? null,
+      taker_fee: item.taker_fee ?? null,
+    });
+
+    const cexList: any[] = Array.isArray(raw.exchanges) ? raw.exchanges.map(normalise) : [];
+
+    // Include the benchmark row (Hyperliquid DEX) if present
+    if (raw.benchmark) {
+      const benchRow = normalise(raw.benchmark);
+      // Only add if not already in the list
+      if (!cexList.find((r) => r.exchange?.toLowerCase() === benchRow.exchange?.toLowerCase())) {
+        return [benchRow, ...cexList];
+      }
+    }
+
+    return cexList;
+  }, [rawData]);
 
   const chartData = useMemo(() => {
-    if (!data) return [];
-    return (data as any[])
+    return [...allRows]
       .sort((a, b) => (b.volume_24h ?? 0) - (a.volume_24h ?? 0))
       .map((d) => ({
         name: CEX_META[d.exchange?.toLowerCase()]?.label ?? d.exchange,
@@ -63,7 +99,7 @@ export default function CEXComparePage() {
         oi: d.oi ?? 0,
         color: CEX_META[d.exchange?.toLowerCase()]?.color ?? '#888',
       }));
-  }, [data]);
+  }, [allRows]);
 
   const tableColumns: Column[] = [
     {
@@ -97,14 +133,17 @@ export default function CEXComparePage() {
     },
     {
       key: 'market_share',
-      label: 'Market Share',
+      label: 'Vol Share',
       align: 'right',
       sortable: true,
-      render: (val: number) => (
-        <span style={{ color: CHART_COLORS.neon, fontFamily: 'JetBrains Mono, monospace' }}>
-          {(val * 100).toFixed(1)}%
-        </span>
-      ),
+      render: (val: number | null) =>
+        val != null ? (
+          <span style={{ color: CHART_COLORS.neon, fontFamily: 'JetBrains Mono, monospace' }}>
+            {(val * 100).toFixed(1)}%
+          </span>
+        ) : (
+          <span style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono, monospace' }}>—</span>
+        ),
     },
     {
       key: 'perp_pairs',
@@ -200,7 +239,7 @@ export default function CEXComparePage() {
         ) : (
           <DataTable
             columns={tableColumns}
-            data={(data as any[]) ?? []}
+            data={allRows}
             rowKey={(row) => row.exchange}
             emptyMessage="No CEX data available"
           />

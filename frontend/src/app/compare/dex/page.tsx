@@ -22,15 +22,15 @@ const DEX_META: Record<string, { color: string; label: string }> = {
 function DEXCard({
   name,
   volume_24h,
-  oi,
+  open_interest,
   market_share,
-  fee_rate,
+  btc_funding_rate,
 }: {
   name: string;
   volume_24h: number;
-  oi: number;
+  open_interest: number;
   market_share: number;
-  fee_rate: number;
+  btc_funding_rate: number;
 }) {
   const meta = DEX_META[name.toLowerCase()] ?? { color: '#e8e8e8', label: name };
   return (
@@ -76,15 +76,17 @@ function DEXCard({
         </div>
         <div>
           <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Open Int.</div>
-          <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace' }}>{fmt.usd(oi)}</div>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace' }}>{fmt.usd(open_interest)}</div>
         </div>
         <div>
           <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mkt Share</div>
           <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: meta.color, fontFamily: 'JetBrains Mono, monospace' }}>{(market_share * 100).toFixed(1)}%</div>
         </div>
         <div>
-          <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Fee Rate</div>
-          <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace' }}>{(fee_rate * 100).toFixed(3)}%</div>
+          <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.3)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>BTC Fund.</div>
+          <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#e8e8e8', fontFamily: 'JetBrains Mono, monospace' }}>
+            {btc_funding_rate != null ? `${(btc_funding_rate * 100).toFixed(4)}%` : '—'}
+          </div>
         </div>
       </div>
     </div>
@@ -92,7 +94,22 @@ function DEXCard({
 }
 
 export default function DEXComparePage() {
-  const { data, isLoading, error } = useDEXComparison();
+  const { data: rawData, isLoading, error } = useDEXComparison();
+
+  // API returns { exchanges: [...], timestamp: ... }
+  // Extract the exchanges array
+  const exchanges: any[] = useMemo(() => {
+    if (!rawData) return [];
+    const list = (rawData as any)?.exchanges ?? [];
+    // Compute total volume for market share calculation
+    const totalVol = list.reduce((sum: number, e: any) => sum + (e.volume_24h ?? 0), 0);
+    return list.map((e: any) => ({
+      ...e,
+      // Normalise field names for the table/card components
+      open_interest: e.open_interest ?? e.oi ?? 0,
+      market_share: totalVol > 0 ? (e.volume_24h ?? 0) / totalVol : 0,
+    }));
+  }, [rawData]);
 
   const tableColumns: Column[] = [
     {
@@ -118,7 +135,7 @@ export default function DEXComparePage() {
       render: (val: number) => fmt.usd(val),
     },
     {
-      key: 'oi',
+      key: 'open_interest',
       label: 'Open Interest',
       align: 'right',
       sortable: true,
@@ -133,7 +150,7 @@ export default function DEXComparePage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
           <div
             style={{
-              width: `${Math.max(val * 100 * 1.5, 4)}px`,
+              width: `${Math.max((val ?? 0) * 100 * 1.5, 4)}px`,
               height: '4px',
               background: CHART_COLORS.neon,
               borderRadius: '2px',
@@ -141,37 +158,34 @@ export default function DEXComparePage() {
             }}
           />
           <span style={{ color: CHART_COLORS.neon, fontFamily: 'JetBrains Mono, monospace' }}>
-            {(val * 100).toFixed(1)}%
+            {((val ?? 0) * 100).toFixed(1)}%
           </span>
         </div>
       ),
     },
     {
-      key: 'fee_rate',
-      label: 'Fee Rate',
+      key: 'pairs_count',
+      label: 'Pairs',
       align: 'right',
       sortable: true,
       render: (val: number) => (
-        <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{(val * 100).toFixed(3)}%</span>
+        <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{val ?? '—'}</span>
       ),
     },
     {
-      key: 'chains',
-      label: 'Chain(s)',
-      render: (val: string[]) => (
-        <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-          {(val ?? []).map((c) => (
-            <Badge key={c} variant="ghost" size="xs">{c}</Badge>
-          ))}
-        </div>
+      key: 'btc_funding_rate',
+      label: 'BTC Funding',
+      align: 'right',
+      sortable: true,
+      render: (val: number) => (
+        <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          {val != null ? `${(val * 100).toFixed(4)}%` : '—'}
+        </span>
       ),
     },
   ];
 
-  const cards = useMemo(() => {
-    if (!data) return [];
-    return (data as any[]).slice(0, 6);
-  }, [data]);
+  const cards = exchanges.slice(0, 6);
 
   return (
     <PageContainer>
@@ -201,7 +215,14 @@ export default function DEXComparePage() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
           {cards.map((d: any) => (
-            <DEXCard key={d.exchange} {...d} />
+            <DEXCard
+              key={d.exchange}
+              name={d.exchange}
+              volume_24h={d.volume_24h}
+              open_interest={d.open_interest}
+              market_share={d.market_share}
+              btc_funding_rate={d.btc_funding_rate}
+            />
           ))}
         </div>
       )}
@@ -220,7 +241,7 @@ export default function DEXComparePage() {
         ) : (
           <DataTable
             columns={tableColumns}
-            data={(data as any[]) ?? []}
+            data={exchanges}
             rowKey={(row) => row.exchange}
             emptyMessage="No DEX data available"
           />
