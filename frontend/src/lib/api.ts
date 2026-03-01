@@ -9,66 +9,103 @@ class APIError extends Error {
   }
 }
 
-async function fetcher<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+async function fetcher<T>(path: string, params?: Record<string, string | number | boolean>): Promise<T> {
   const url = new URL(`${API_BASE}${path}`);
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) url.searchParams.set(key, String(value));
+      url.searchParams.set(key, String(value));
     });
   }
   const res = await fetch(url.toString(), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
     signal: AbortSignal.timeout(15_000),
   });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new APIError(`${res.status}: ${body || res.statusText}`, res.status);
-  }
+  if (!res.ok) throw new APIError(`API ${res.status}: ${res.statusText}`, res.status);
   return res.json() as Promise<T>;
 }
 
+/* ── Overview ─────────────────────────────────────── */
 export const overviewAPI = {
-  kpis: () => fetcher('/overview/kpis'),
-  heatmap: () => fetcher('/overview/heatmap'),
-  sparklines: () => fetcher('/overview/sparklines'),
+  kpis: () => fetcher<any>('/overview/kpis'),
+  heatmap: () => fetcher<any[]>('/overview/heatmap'),
+  sparklines: () => fetcher<any>('/overview/sparklines'),
+  recentTrades: () => fetcher<any[]>('/overview/recent-trades'),
 };
 
+/* ── Markets ──────────────────────────────────────── */
 export const marketsAPI = {
-  all: () => fetcher('/markets/all'),
-  candles: (asset: string, interval = '1h', limit = 200) =>
-    fetcher('/markets/candles', { asset, interval, limit }),
-  oiHistory: (asset: string, days = 30) =>
-    fetcher('/markets/oi-history', { asset, days }),
-  fundingHistory: (asset: string, days = 30) =>
-    fetcher('/markets/funding-history', { asset, days }),
+  all: () => fetcher<any[]>('/markets/assets'),
+  fundingRates: () => fetcher<any[]>('/markets/funding-rates'),
+  oiDistribution: () => fetcher<any[]>('/markets/oi-distribution'),
+  volumeHistory: () => fetcher<any[]>('/markets/volume-history'),
+  candles: (asset: string, interval: string = '1h') =>
+    fetcher<any[]>(`/markets/${asset}/candles`, { interval }),
+  oiHistory: (asset: string, days?: number) =>
+    fetcher<any[]>(`/markets/${asset}/oi-history`, days ? { days } : undefined),
+  fundingHistory: (asset: string, days?: number) =>
+    fetcher<any[]>(`/markets/${asset}/funding-history`, days ? { days } : undefined),
+  liquidations: (asset: string) =>
+    fetcher<any[]>(`/markets/${asset}/liquidations`),
+  takerVolume: (asset: string) =>
+    fetcher<any[]>(`/markets/${asset}/taker-volume`),
 };
 
+/* ── Orderbook ────────────────────────────────────── */
 export const orderbookAPI = {
-  snapshot: (pair: string) => fetcher('/orderbook/snapshot', { pair }),
-  spreadHistory: (pair: string) => fetcher('/orderbook/spread-history', { pair }),
+  snapshot: (pair: string) => fetcher<any>(`/orderbook/${pair}`),
+  spreadHistory: (pair: string) => fetcher<any[]>(`/orderbook/${pair}/spread-history`),
+  largeOrders: (pair: string) => fetcher<any[]>(`/orderbook/${pair}/large-orders`),
 };
 
+/* ── Traders ──────────────────────────────────────── */
 export const tradersAPI = {
-  leaderboard: (params?: { sort?: string; limit?: number }) =>
-    fetcher('/traders/leaderboard', params),
-  summary: (address: string) => fetcher(`/traders/${address}/summary`),
-  positions: (address: string) => fetcher(`/traders/${address}/positions`),
-  fills: (address: string, params?: { limit?: number }) =>
-    fetcher(`/traders/${address}/fills`, params),
-  pnl: (address: string) => fetcher(`/traders/${address}/pnl`),
+  leaderboard: (params?: Record<string, string | number | boolean>) =>
+    fetcher<any[]>('/traders/leaderboard', params as any),
+  distribution: () => fetcher<any>('/traders/distribution'),
+  summary: (address: string) => fetcher<any>(`/traders/${address}/summary`),
+  positions: (address: string) => fetcher<any[]>(`/traders/${address}/positions`),
+  fills: (address: string, params?: Record<string, string | number | boolean>) =>
+    fetcher<any[]>(`/traders/${address}/fills`, params as any),
+  pnl: (address: string, period?: string) =>
+    fetcher<any[]>(`/traders/${address}/pnl-chart`, period ? { period } : undefined),
+  fundingHistory: (address: string) => fetcher<any[]>(`/traders/${address}/funding`),
+  orders: (address: string) => fetcher<any[]>(`/traders/${address}/orders`),
 };
 
+/* ── Compare ──────────────────────────────────────── */
 export const compareAPI = {
-  dex: () => fetcher('/compare/dex'),
-  cex: () => fetcher('/compare/cex'),
+  dex: () => fetcher<any>('/compare/dex/snapshot'),
+  cex: () => fetcher<any>('/compare/cex/snapshot'),
+  dexVolumeHistory: () => fetcher<any[]>('/compare/dex/volume-history'),
+  dexOIHistory: () => fetcher<any[]>('/compare/dex/oi-history'),
+  dexFundingRates: () => fetcher<any[]>('/compare/dex/funding-rates'),
+  cexVolumeHistory: () => fetcher<any[]>('/compare/cex/volume-history'),
+  cexOIHistory: () => fetcher<any[]>('/compare/cex/oi-history'),
+  cexFundingHistory: () => fetcher<any[]>('/compare/cex/funding-history'),
+  cexLiquidations: () => fetcher<any[]>('/compare/cex/liquidations'),
+  cexLongShort: () => fetcher<any[]>('/compare/cex/long-short'),
 };
 
+/* ── Protocol ─────────────────────────────────────── */
 export const protocolAPI = {
-  stats: () => fetcher('/protocol/stats'),
-  vaults: () => fetcher('/protocol/vaults'),
-  staking: () => fetcher('/protocol/staking'),
+  stats: () => fetcher<any>('/protocol/hype'),
+  af: () => fetcher<any>('/protocol/af'),
+  hlp: () => fetcher<any>('/protocol/hlp'),
+  staking: () => fetcher<any>('/protocol/staking'),
+  hype: () => fetcher<any>('/protocol/hype'),
+  fees: (period?: string) => fetcher<any>('/protocol/fees', period ? { period } : undefined),
+  revenue: () => fetcher<any>('/protocol/revenue'),
+  tvl: () => fetcher<any>('/protocol/tvl'),
+  vaults: () => fetcher<any>('/protocol/hlp'),
 };
 
+/* ── Health ───────────────────────────────────────── */
 export const healthAPI = {
-  check: () => fetcher('/health'),
+  check: () => fetch('https://hyperscope-production-7084.up.railway.app/health').then(r => r.json()),
+};
+
+export const statusAPI = {
+  getHealth: () => healthAPI.check(),
+  getStatus: () => fetcher<any>('/status'),
 };
