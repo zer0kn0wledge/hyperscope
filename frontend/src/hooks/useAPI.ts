@@ -14,7 +14,7 @@ import { REFRESH_INTERVAL } from '@/lib/constants';
 const STALE_TIME = 20_000;
 const RETRY = 2;
 
-// ─── Overview ───────────────────────────────────────────────────────────────────
+// ─── Overview ───────────────────────────────────────────────────────────────
 
 export function useKPIs() {
   return useQuery({
@@ -46,7 +46,19 @@ export function useSparklines() {
   });
 }
 
-// ─── Markets ─────────────────────────────────────────────────────────────────
+// ─── TVL ─────────────────────────────────────────────────────────────────
+
+export function useTVLData() {
+  return useQuery({
+    queryKey: ['tvl'],
+    queryFn: protocolAPI.tvl,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    retry: RETRY,
+  });
+}
+
+// ─── Markets ─────────────────────────────────────────────────────────────
 
 export function useAllAssets() {
   return useQuery({
@@ -89,7 +101,7 @@ export function useAssetFundingHistory(asset: string, days = 30) {
   });
 }
 
-// ─── Orderbook ──────────────────────────────────────────────────────────────
+// ─── Orderbook ──────────────────────────────────────────────────────────
 
 export function useOrderbookSnapshot(pair: string) {
   return useQuery({
@@ -112,7 +124,7 @@ export function useSpreadHistory(pair: string) {
   });
 }
 
-// ─── Traders ─────────────────────────────────────────────────────────────────
+// ─── Traders ─────────────────────────────────────────────────────────────
 
 export function useLeaderboard(params?: { sort?: string; limit?: number }) {
   return useQuery({
@@ -166,7 +178,7 @@ export function useTraderPnL(address: string) {
   });
 }
 
-// ─── Compare ─────────────────────────────────────────────────────────────────
+// ─── Compare ─────────────────────────────────────────────────────────────
 
 export function useDEXComparison() {
   return useQuery({
@@ -188,7 +200,7 @@ export function useCEXComparison() {
   });
 }
 
-// ─── Protocol ────────────────────────────────────────────────────────────────
+// ─── Protocol ────────────────────────────────────────────────────────────
 
 export function useProtocolStats() {
   return useQuery({
@@ -218,7 +230,7 @@ export function useStakingStats() {
   });
 }
 
-// ─── Health ────────────────────────────────────────────────────────────────────
+// ─── Health ──────────────────────────────────────────────────────────────
 
 export function useAPIHealth() {
   return useQuery({

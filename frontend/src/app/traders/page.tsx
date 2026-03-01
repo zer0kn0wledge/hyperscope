@@ -23,6 +23,60 @@ interface LeaderboardEntry {
   rank: number;
 }
 
+function EmptyLeaderboard() {
+  return (
+    <div
+      style={{
+        padding: '3rem 2rem',
+        textAlign: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '0.75rem',
+      }}
+    >
+      <div
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: '50%',
+          background: 'rgba(0,255,136,0.06)',
+          border: '1px solid rgba(0,255,136,0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '1.375rem',
+          marginBottom: '0.25rem',
+        }}
+      >
+        👤
+      </div>
+      <div style={{ color: '#e8e8e8', fontFamily: 'Inter, sans-serif', fontSize: '0.9375rem', fontWeight: 600 }}>
+        No leaderboard data yet
+      </div>
+      <div style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'Inter, sans-serif', fontSize: '0.8125rem', maxWidth: 360, lineHeight: 1.6 }}>
+        Trader data is being collected. Use the address search above to look up any Hyperliquid wallet directly.
+      </div>
+      <div
+        style={{
+          marginTop: '0.5rem',
+          padding: '0.375rem 0.875rem',
+          background: 'rgba(0,255,136,0.06)',
+          border: '1px solid rgba(0,255,136,0.12)',
+          borderRadius: '6px',
+          color: 'rgba(0,255,136,0.7)',
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: '0.6875rem',
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+        }}
+      >
+        Full leaderboard coming soon
+      </div>
+    </div>
+  );
+}
+
 export default function TradersPage() {
   const router = useRouter();
   const [sortField, setSortField] = useState<SortField>('account_value');
@@ -60,14 +114,23 @@ export default function TradersPage() {
       ),
     },
     { key: 'account_value', label: 'Account Value', align: 'right', sortable: true, render: (val: number) => <span style={{ color: '#e8e8e8', fontWeight: 500 }}>{fmt.usd(val)}</span> },
-    { key: 'unrealized_pnl', label: 'Unrealized PnL', align: 'right', sortable: true, render: (val: number) => { if (!val) return <span style={{ color: 'rgba(255,255,255,0.3)' }}>—</span>; return <span style={{ color: val >= 0 ? CHART_COLORS.neon : CHART_COLORS.red }}>{val >= 0 ? '+' : ''}{fmt.usd(val)}</span>; } },
+    {
+      key: 'unrealized_pnl',
+      label: 'Unrealized PnL',
+      align: 'right',
+      sortable: true,
+      render: (val: number) => {
+        if (!val) return <span style={{ color: 'rgba(255,255,255,0.3)' }}>—</span>;
+        return <span style={{ color: val >= 0 ? CHART_COLORS.neon : CHART_COLORS.red }}>{val >= 0 ? '+' : ''}{fmt.usd(val)}</span>;
+      },
+    },
     { key: 'total_margin_used', label: 'Margin Used', align: 'right', sortable: true, render: (val: number) => val > 0 ? fmt.usd(val) : <span style={{ color: 'rgba(255,255,255,0.3)' }}>—</span> },
     { key: 'withdrawable', label: 'Withdrawable', align: 'right', sortable: true, render: (val: number) => fmt.usd(val) },
     { key: 'position_count', label: 'Positions', align: 'right', sortable: true, render: (val: number) => <span style={{ color: val > 0 ? '#e8e8e8' : 'rgba(255,255,255,0.3)' }}>{val > 0 ? val : '—'}</span> },
   ];
 
   const handleSearch = (address: string) => { router.push(`/traders/${address}`); };
-  const isLimitedData = entries.length <= 3;
+  const isLimitedData = entries.length > 0 && entries.length <= 3;
 
   return (
     <PageContainer>
@@ -75,27 +138,80 @@ export default function TradersPage() {
         <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#e8e8e8', margin: '0 0 0.375rem', letterSpacing: '-0.02em', fontFamily: 'Inter, sans-serif' }}>Traders</h1>
         <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.35)', margin: 0, fontFamily: 'Inter, sans-serif' }}>Leaderboard and trader lookup by address</p>
       </div>
+
+      {/* Address Search */}
       <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
         <SectionHeader title="Lookup Trader" subtitle="Enter any Hyperliquid address to view positions, fills, and PnL" />
         <AddressSearch onSearch={handleSearch} label="Trader Address" placeholder="0x... Hyperliquid address" />
       </div>
+
+      {/* Leaderboard Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '1.25rem 1.25rem 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-          <div><SectionHeader title="Top Accounts by Value" subtitle={isLimitedData ? 'Showing top accounts — full leaderboard coming soon' : 'Top traders ranked by account value'} /></div>
+          <div>
+            <SectionHeader
+              title="Top Accounts by Value"
+              subtitle={isLimitedData ? 'Showing top accounts — full leaderboard coming soon' : 'Top traders ranked by account value'}
+            />
+          </div>
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
             {(['account_value', 'position_count', 'unrealized_pnl'] as SortField[]).map((field) => {
               const labels: Record<SortField, string> = { account_value: 'By Value', position_count: 'By Positions', unrealized_pnl: 'By PnL' };
-              return <button key={field} onClick={() => setSortField(field)} style={{ background: sortField === field ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.04)', border: sortField === field ? '1px solid rgba(0,255,136,0.3)' : '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', color: sortField === field ? '#00ff88' : 'rgba(255,255,255,0.45)', fontFamily: 'Inter, sans-serif', fontSize: '0.75rem', fontWeight: 500, padding: '0.375rem 0.75rem', cursor: 'pointer', transition: 'all 0.15s ease' }}>{labels[field]}</button>;
+              return (
+                <button
+                  key={field}
+                  onClick={() => setSortField(field)}
+                  style={{
+                    background: sortField === field ? 'rgba(0,255,136,0.12)' : 'rgba(255,255,255,0.04)',
+                    border: sortField === field ? '1px solid rgba(0,255,136,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '6px',
+                    color: sortField === field ? '#00ff88' : 'rgba(255,255,255,0.45)',
+                    fontFamily: 'Inter, sans-serif',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    padding: '0.375rem 0.75rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {labels[field]}
+                </button>
+              );
             })}
           </div>
         </div>
-        {isLimitedData && entries.length > 0 && !isLoading && (
+
+        {/* Limited data notice */}
+        {isLimitedData && !isLoading && (
           <div style={{ margin: '0 1.25rem', padding: '0.625rem 1rem', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.15)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Badge variant="yellow" size="xs">Note</Badge>
             <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', fontFamily: 'Inter, sans-serif' }}>Showing top accounts by value — full leaderboard coming soon</span>
           </div>
         )}
-        {isLoading ? <SkeletonTable rows={8} cols={7} /> : error ? <div style={{ padding: '3rem', textAlign: 'center', color: CHART_COLORS.red, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem' }}>Failed to load leaderboard<button onClick={() => refetch()} style={{ display: 'block', margin: '1rem auto 0', background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.2)', borderRadius: '6px', color: '#00ff88', fontFamily: 'Inter, sans-serif', fontSize: '0.75rem', padding: '0.375rem 1rem', cursor: 'pointer' }}>Retry</button></div> : <DataTable columns={columns} data={entries} rowKey={(row) => row.address} onRowClick={(row) => router.push(`/traders/${row.address}`)} emptyMessage="No leaderboard data available" />}
+
+        {isLoading ? (
+          <SkeletonTable rows={8} cols={7} />
+        ) : error ? (
+          <div style={{ padding: '3rem', textAlign: 'center', color: CHART_COLORS.red, fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem' }}>
+            Failed to load leaderboard
+            <button
+              onClick={() => refetch()}
+              style={{ display: 'block', margin: '1rem auto 0', background: 'rgba(0,255,136,0.08)', border: '1px solid rgba(0,255,136,0.2)', borderRadius: '6px', color: '#00ff88', fontFamily: 'Inter, sans-serif', fontSize: '0.75rem', padding: '0.375rem 1rem', cursor: 'pointer' }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : entries.length === 0 ? (
+          <EmptyLeaderboard />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={entries}
+            rowKey={(row) => row.address}
+            onRowClick={(row) => router.push(`/traders/${row.address}`)}
+            emptyMessage="No leaderboard data available"
+          />
+        )}
       </div>
     </PageContainer>
   );
