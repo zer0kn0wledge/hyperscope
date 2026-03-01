@@ -53,7 +53,6 @@ class ProtocolService:
                 "daily_chart": [],
             }
 
-        # Parse daily chart data
         daily_chart_raw = raw.get("totalDataChart", [])
         daily_chart = []
         total_30d = 0.0
@@ -75,16 +74,14 @@ class ProtocolService:
             "total_7d": float(raw.get("total7d", 0) or 0),
             "total_30d": total_30d,
             "total_all_time": float(raw.get("totalAllTime", 0) or 0),
-            "daily_chart": daily_chart[-90:],  # last 90 days
+            "daily_chart": daily_chart[-90:],
         }
 
         await cache.set(cache_key, result, TTL_FEES)
         return result
 
     async def get_revenue(self) -> dict[str, Any]:
-        """
-        Revenue breakdown: AF (97%) vs HLP (3%).
-        """
+        """Revenue breakdown: AF (97%) vs HLP (3%)."""
         fees = await self.get_fees()
         return {
             "total_24h": fees["total_24h"],
@@ -106,16 +103,14 @@ class ProtocolService:
         }
 
     async def get_af_state(self) -> dict[str, Any]:
-        """
-        Assistance Fund state: HYPE spot balance and recent buyback events.
-        """
+        """Assistance Fund state: HYPE spot balance and recent buyback events."""
         cache_key = "protocol:af"
         cached = await cache.get(cache_key, TTL_PROTOCOL)
         if cached is not None:
             return cached
 
         af_address = settings.af_address
-        start_time = int((time.time() - 30 * 86_400) * 1000)  # 30 days
+        start_time = int((time.time() - 30 * 86_400) * 1000)
 
         spot_state, ledger_updates = await asyncio.gather(
             hl_client.spot_clearinghouse_state(user=af_address),
@@ -126,7 +121,6 @@ class ProtocolService:
             return_exceptions=True,
         )
 
-        # Extract HYPE balance
         hype_balance = 0.0
         usdc_balance = 0.0
         if isinstance(spot_state, dict):
@@ -139,7 +133,6 @@ class ProtocolService:
                 elif coin in ("USDC", "USDC.e"):
                     usdc_balance += total
 
-        # Parse buyback events from ledger
         buyback_events = []
         if isinstance(ledger_updates, list):
             for item in ledger_updates[:50]:
@@ -168,9 +161,7 @@ class ProtocolService:
         return result
 
     async def get_hlp_vault(self) -> dict[str, Any]:
-        """
-        HLP Vault performance: TVL, APR, PnL history, positions, depositor count.
-        """
+        """HLP Vault performance: TVL, APR, PnL history, positions, depositor count."""
         cache_key = "protocol:hlp"
         cached = await cache.get(cache_key, TTL_PROTOCOL)
         if cached is not None:
@@ -204,7 +195,6 @@ class ProtocolService:
             followers = vault_data.get("followers", [])
             result["depositor_count"] = len(followers)
 
-            # TVL = sum of follower equity + leader equity
             total_equity = 0.0
             for follower in followers:
                 try:
@@ -213,7 +203,6 @@ class ProtocolService:
                     pass
             result["tvl"] = total_equity
 
-            # Account value history
             for entry in vault_data.get("accountValueHistory", []):
                 if isinstance(entry, (list, tuple)) and len(entry) == 2:
                     try:
@@ -224,7 +213,6 @@ class ProtocolService:
                     except (TypeError, ValueError):
                         pass
 
-            # PnL history
             for entry in vault_data.get("pnlHistory", []):
                 if isinstance(entry, (list, tuple)) and len(entry) == 2:
                     try:
@@ -235,7 +223,6 @@ class ProtocolService:
                     except (TypeError, ValueError):
                         pass
 
-        # Current positions
         if isinstance(positions_data, dict):
             for pos_wrapper in positions_data.get("assetPositions", []):
                 pos = pos_wrapper.get("position", pos_wrapper)
@@ -264,9 +251,7 @@ class ProtocolService:
         return result
 
     async def get_staking(self) -> dict[str, Any]:
-        """
-        Staking statistics: validator list, total staked, APR estimates.
-        """
+        """Staking statistics: validator list, total staked, APR estimates."""
         cache_key = "protocol:staking"
         cached = await cache.get(cache_key, TTL_STAKING)
         if cached is not None:
@@ -281,7 +266,7 @@ class ProtocolService:
 
         for v in validators_raw:
             try:
-                stake = float(v.get("stake", 0) or 0)
+                stake = float(v.get("stake", 0) or 0) / 1e8
                 total_staked += stake
                 validators.append({
                     "validator": v.get("validator", ""),
@@ -295,19 +280,18 @@ class ProtocolService:
             except (TypeError, ValueError):
                 continue
 
-        # Sort by stake
         validators.sort(key=lambda x: x["stake"], reverse=True)
 
-        # Add stake percentage
         for v in validators:
             v["stake_pct"] = round(v["stake"] / total_staked * 100, 2) if total_staked > 0 else 0
 
-        # Estimate average APR
         avg_apr = 0.0
         if validators:
             valid_aprs = [v["apr"] for v in validators if v["apr"] > 0]
             if valid_aprs:
                 avg_apr = sum(valid_aprs) / len(valid_aprs)
+            else:
+                avg_apr = 0.025
 
         result = {
             "validators": validators,
@@ -322,21 +306,17 @@ class ProtocolService:
         return result
 
     async def get_hype_metrics(self) -> dict[str, Any]:
-        """
-        HYPE token metrics: price, market cap, FDV, volume, supply.
-        Primary: CoinGecko; Fallback: HL spot markets.
-        """
+        """HYPE token metrics: price, market cap, FDV, volume, supply."""
         cache_key = "protocol:hype"
         cached = await cache.get(cache_key, TTL_HYPE)
         if cached is not None:
             return cached
 
-        # Try CoinGecko first
         gecko_data = await coingecko_client.hype_market_data()
         if gecko_data:
             result = {
                 "price": float(gecko_data.get("current_price", 0) or 0),
-                "price_change_24h": float(gecko_data.get("price_change_percentage_24h", 0) or 0),
+                "price_change_24h": float(gecko_data.get("price_change_percentage_24h", 0) or 0) / 100,
                 "price_change_7d": float(gecko_data.get("price_change_percentage_7d_in_currency", 0) or 0),
                 "market_cap": float(gecko_data.get("market_cap", 0) or 0),
                 "fully_diluted_valuation": float(gecko_data.get("fully_diluted_valuation", 0) or 0),
@@ -349,7 +329,6 @@ class ProtocolService:
             await cache.set(cache_key, result, TTL_HYPE)
             return result
 
-        # Fallback: HL spot markets
         spot_result = await hl_client.spot_meta_and_asset_ctxs()
         result = {
             "price": 0.0,
@@ -410,14 +389,12 @@ class ProtocolService:
             result["tvl_prev_week"] = float(protocol.get("tvlPrevWeek", 0) or 0)
             result["tvl_prev_month"] = float(protocol.get("tvlPrevMonth", 0) or 0)
 
-            # TVL history from chainTvls
             chain_tvls = protocol.get("chainTvls", {})
             if chain_tvls:
-                # Take the first chain's TVL series as overall proxy
                 for chain_data in chain_tvls.values():
                     if isinstance(chain_data, dict):
                         tvl_series = chain_data.get("tvl", [])
-                        for entry in tvl_series[-90:]:  # last 90 days
+                        for entry in tvl_series[-90:]:
                             if isinstance(entry, dict):
                                 result["tvl_history"].append({
                                     "date": entry.get("date", 0),
