@@ -26,25 +26,16 @@ const CEX_META: Record<string, { color: string; label: string }> = {
   okx: { color: '#3d9fdf', label: 'OKX' },
   coinbase: { color: '#0052ff', label: 'Coinbase' },
   kraken: { color: '#5741d9', label: 'Kraken' },
+  kucoin: { color: '#23af91', label: 'KuCoin' },
 };
 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div
-      style={{
-        background: '#0a0a0a',
-        border: '1px solid rgba(0,255,136,0.2)',
-        borderRadius: '10px',
-        padding: '0.625rem 0.875rem',
-        fontFamily: 'JetBrains Mono, monospace',
-      }}
-    >
+    <div style={{ background: '#0a0a0a', border: '1px solid rgba(0,255,136,0.2)', borderRadius: '10px', padding: '0.625rem 0.875rem', fontFamily: 'JetBrains Mono, monospace' }}>
       <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>{label}</div>
       {payload.map((p: any, i: number) => (
-        <div key={i} style={{ fontSize: '0.8125rem', color: p.fill }}>
-          {fmt.usd(p.value)}
-        </div>
+        <div key={i} style={{ fontSize: '0.8125rem', color: p.fill }}>{fmt.usd(p.value)}</div>
       ))}
     </div>
   );
@@ -53,197 +44,81 @@ function CustomTooltip({ active, payload, label }: any) {
 export default function CEXComparePage() {
   const { data: rawData, isLoading, error } = useCEXComparison();
 
-  // API returns:
-  // { benchmark: { exchange, type, total_volume_24h_usd, total_oi_usd, perpetual_pairs },
-  //   exchanges: [{ exchange, type, total_volume_24h_usd, total_oi_usd, perpetual_pairs,
-  //                 volume_share_pct, oi_share_pct }],
-  //   timestamp }
-  // Normalise to a flat list that includes the benchmark (Hyperliquid) + CEX exchanges
   const allRows: any[] = useMemo(() => {
     if (!rawData) return [];
     const raw = rawData as any;
-
     const normalise = (item: any) => ({
       exchange: item.exchange ?? '',
       type: item.type ?? '',
-      // Normalise volume/OI field names
       volume_24h: item.total_volume_24h_usd ?? item.volume_24h ?? 0,
       oi: item.total_oi_usd ?? item.oi ?? 0,
       perp_pairs: item.perpetual_pairs ?? item.perp_pairs ?? null,
-      // volume_share_pct comes as a percentage (e.g. 55.3) → convert to 0–1 fraction for render
       market_share: item.volume_share_pct != null ? item.volume_share_pct / 100 : null,
       maker_fee: item.maker_fee ?? null,
       taker_fee: item.taker_fee ?? null,
     });
-
     const cexList: any[] = Array.isArray(raw.exchanges) ? raw.exchanges.map(normalise) : [];
-
-    // Include the benchmark row (Hyperliquid DEX) if present
     if (raw.benchmark) {
       const benchRow = normalise(raw.benchmark);
-      // Only add if not already in the list
       if (!cexList.find((r) => r.exchange?.toLowerCase() === benchRow.exchange?.toLowerCase())) {
         return [benchRow, ...cexList];
       }
     }
-
     return cexList;
   }, [rawData]);
 
   const chartData = useMemo(() => {
-    return [...allRows]
-      .sort((a, b) => (b.volume_24h ?? 0) - (a.volume_24h ?? 0))
-      .map((d) => ({
-        name: CEX_META[d.exchange?.toLowerCase()]?.label ?? d.exchange,
-        volume: d.volume_24h ?? 0,
-        oi: d.oi ?? 0,
-        color: CEX_META[d.exchange?.toLowerCase()]?.color ?? '#888',
-      }));
+    return [...allRows].sort((a, b) => (b.volume_24h ?? 0) - (a.volume_24h ?? 0)).map((d) => ({
+      name: CEX_META[d.exchange?.toLowerCase()]?.label ?? d.exchange,
+      volume: d.volume_24h ?? 0,
+      oi: d.oi ?? 0,
+      color: CEX_META[d.exchange?.toLowerCase()]?.color ?? '#888',
+    }));
   }, [allRows]);
 
   const tableColumns: Column[] = [
-    {
-      key: 'exchange',
-      label: 'Exchange',
-      sortable: true,
-      render: (val: string) => {
-        const meta = CEX_META[val.toLowerCase()] ?? { color: '#e8e8e8', label: val };
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
-            <span style={{ color: '#e8e8e8' }}>{meta.label}</span>
-            {val.toLowerCase() === 'hyperliquid' && <Badge variant="neon" size="xs">HL</Badge>}
-          </div>
-        );
-      },
-    },
-    {
-      key: 'volume_24h',
-      label: '24h Volume',
-      align: 'right',
-      sortable: true,
-      render: (val: number) => fmt.usd(val),
-    },
-    {
-      key: 'oi',
-      label: 'Open Interest',
-      align: 'right',
-      sortable: true,
-      render: (val: number) => fmt.usd(val),
-    },
-    {
-      key: 'market_share',
-      label: 'Vol Share',
-      align: 'right',
-      sortable: true,
-      render: (val: number | null) =>
-        val != null ? (
-          <span style={{ color: CHART_COLORS.neon, fontFamily: 'JetBrains Mono, monospace' }}>
-            {(val * 100).toFixed(1)}%
-          </span>
-        ) : (
-          <span style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono, monospace' }}>—</span>
-        ),
-    },
-    {
-      key: 'perp_pairs',
-      label: 'Perp Pairs',
-      align: 'right',
-      sortable: true,
-      render: (val: number) => (
-        <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{val ?? '—'}</span>
-      ),
-    },
-    {
-      key: 'maker_fee',
-      label: 'Maker Fee',
-      align: 'right',
-      render: (val: number) => (
-        <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{val != null ? `${(val * 100).toFixed(3)}%` : '—'}</span>
-      ),
-    },
-    {
-      key: 'taker_fee',
-      label: 'Taker Fee',
-      align: 'right',
-      render: (val: number) => (
-        <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{val != null ? `${(val * 100).toFixed(3)}%` : '—'}</span>
-      ),
-    },
+    { key: 'exchange', label: 'Exchange', sortable: true, render: (val: string) => { const meta = CEX_META[val.toLowerCase()] ?? { color: '#e8e8e8', label: val }; return (<div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} /><span style={{ color: '#e8e8e8' }}>{meta.label}</span>{val.toLowerCase() === 'hyperliquid' && <Badge variant="neon" size="xs">HL</Badge>}</div>); } },
+    { key: 'volume_24h', label: '24h Volume', align: 'right', sortable: true, render: (val: number) => val > 0 ? fmt.usd(val) : <span style={{ color: 'rgba(255,255,255,0.25)', fontFamily: 'JetBrains Mono, monospace' }}>N/A</span> },
+    { key: 'oi', label: 'Open Interest', align: 'right', sortable: true, render: (val: number) => val > 0 ? fmt.usd(val) : <span style={{ color: 'rgba(255,255,255,0.25)', fontFamily: 'JetBrains Mono, monospace' }}>N/A</span> },
+    { key: 'market_share', label: 'Vol Share', align: 'right', sortable: true, render: (val: number | null) => val != null && val > 0 ? <span style={{ color: CHART_COLORS.neon, fontFamily: 'JetBrains Mono, monospace' }}>{(val * 100).toFixed(1)}%</span> : <span style={{ color: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono, monospace' }}>—</span> },
+    { key: 'perp_pairs', label: 'Perp Pairs', align: 'right', sortable: true, render: (val: number) => <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{val ?? '—'}</span> },
+    { key: 'maker_fee', label: 'Maker Fee', align: 'right', render: (val: number) => <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{val != null ? `${(val * 100).toFixed(3)}%` : '—'}</span> },
+    { key: 'taker_fee', label: 'Taker Fee', align: 'right', render: (val: number) => <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{val != null ? `${(val * 100).toFixed(3)}%` : '—'}</span> },
   ];
 
   return (
     <PageContainer>
       <div style={{ marginBottom: '1.5rem' }}>
-        <h1
-          style={{
-            fontSize: '1.25rem',
-            fontWeight: 700,
-            color: '#e8e8e8',
-            margin: '0 0 0.375rem',
-            letterSpacing: '-0.02em',
-            fontFamily: 'Inter, sans-serif',
-          }}
-        >
-          CEX Comparison
-        </h1>
-        <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.35)', margin: 0, fontFamily: 'Inter, sans-serif' }}>
-          Hyperliquid vs. top centralized exchanges by perpetuals volume
-        </p>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#e8e8e8', margin: '0 0 0.375rem', letterSpacing: '-0.02em', fontFamily: 'Inter, sans-serif' }}>CEX Comparison</h1>
+        <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.35)', margin: 0, fontFamily: 'Inter, sans-serif' }}>Hyperliquid vs. top centralized exchanges by perpetuals volume</p>
       </div>
 
-      {/* Volume Bar Chart */}
       <div className="card" style={{ marginBottom: '2rem', padding: '1.25rem' }}>
         <SectionHeader title="24h Volume Comparison" subtitle="Perpetuals volume across major venues" />
-        {isLoading ? (
-          <SkeletonChart height={260} />
+        {isLoading ? <SkeletonChart height={260} /> : chartData.length === 0 ? (
+          <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '0.8125rem', fontFamily: 'JetBrains Mono, monospace' }}>no data</div>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => fmt.usd(v)}
-                width={80}
-              />
+              <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt.usd(v)} width={80} />
               <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="volume" radius={[4, 4, 0, 0]}>
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.85} />
-                ))}
+                {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.85} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         )}
       </div>
 
-      {/* Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '1.25rem 1.25rem 0' }}>
           <SectionHeader title="Full CEX Comparison" subtitle="Centralized exchange perpetuals data" />
         </div>
-        {isLoading ? (
-          <SkeletonTable rows={6} cols={7} />
-        ) : error ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#ff4d4d', fontSize: '0.8125rem' }}>
-            Failed to load CEX data
-          </div>
-        ) : (
-          <DataTable
-            columns={tableColumns}
-            data={allRows}
-            rowKey={(row) => row.exchange}
-            emptyMessage="No CEX data available"
-          />
-        )}
+        {isLoading ? <SkeletonTable rows={6} cols={7} /> : error ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#ff4d4d', fontSize: '0.8125rem' }}>Failed to load CEX data</div>
+        ) : <DataTable columns={tableColumns} data={allRows} rowKey={(row) => row.exchange} emptyMessage="No CEX data available" />}
       </div>
     </PageContainer>
   );
