@@ -46,6 +46,10 @@ class DeFiLlamaClient(BaseHTTPClient):
         if self._fees_client:
             await self._fees_client.close()
 
+    async def get(self, path: str) -> Any:
+        """Generic GET request to DeFiLlama API."""
+        return await super().get(path)
+
     async def protocol_tvl(self, protocol_slug: str) -> float | None:
         """Current TVL for a protocol."""
         return await self.get(f"/tvl/{protocol_slug}")

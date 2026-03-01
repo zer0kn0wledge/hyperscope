@@ -29,7 +29,9 @@ class OrderbookService:
         if cached is not None:
             return cached
 
-        raw = await hl_client.l2_book(coin=pair)
+        # Strip -PERP suffix for HL API
+        coin = pair.split("-")[0] if "-" in pair else pair
+        raw = await hl_client.l2_book(coin=coin)
         if not raw:
             return {"bids": [], "asks": [], "spread_bps": 0.0, "mid_price": 0.0}
 
