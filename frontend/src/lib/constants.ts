@@ -13,6 +13,10 @@ export const CHART_COLORS = {
 
 export const PAIRS = ['BTC-PERP', 'ETH-PERP', 'SOL-PERP', 'HYPE-PERP'];
 
+/* ── Candle intervals ───────────────────────────── */
+export const CANDLE_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'] as const;
+export type CandleInterval = typeof CANDLE_INTERVALS[number];
+
 /* ── API ──────────────────────────────────────────── */
 export const API_BASE = 'https://hyperscope-production-7084.up.railway.app/api';
 
