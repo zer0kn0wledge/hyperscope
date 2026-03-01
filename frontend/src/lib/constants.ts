@@ -14,8 +14,8 @@ export const CHART_COLORS = {
 export const PAIRS = ['BTC-PERP', 'ETH-PERP', 'SOL-PERP', 'HYPE-PERP'];
 
 /* ── API ──────────────────────────────────────────── */
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? 'https://hyperscope-production-7084.up.railway.app';
+// Hardcoded to Railway production backend for reliable builds
+export const API_BASE = 'https://hyperscope-production-7084.up.railway.app';
 
 /* ── Misc ─────────────────────────────────────────── */
 export const REFETCH_INTERVAL = 30_000; // 30 s
