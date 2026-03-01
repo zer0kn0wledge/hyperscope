@@ -21,9 +21,10 @@ export function MouseGlow() {
     };
 
     const animate = () => {
+      // Smooth lerp towards cursor — easing factor 0.06 gives a soft lag
       currentX += (targetX - currentX) * 0.06;
       currentY += (targetY - currentY) * 0.06;
-      el.style.transform = `translate(${currentX - 300}px, ${currentY - 300}px)`;
+      el.style.background = `radial-gradient(600px circle at ${currentX}px ${currentY}px, rgba(0,255,136,0.04) 0%, transparent 40%)`;
       animFrame = requestAnimationFrame(animate);
     };
 
@@ -43,13 +44,11 @@ export function MouseGlow() {
         position: 'fixed',
         top: 0,
         left: 0,
-        width: 600,
-        height: 600,
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(0,255,136,0.04) 0%, transparent 70%)',
+        width: '100%',
+        height: '100%',
         pointerEvents: 'none',
         zIndex: 0,
-        willChange: 'transform',
+        willChange: 'background',
       }}
     />
   );

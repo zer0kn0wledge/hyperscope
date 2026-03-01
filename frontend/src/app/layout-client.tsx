@@ -8,7 +8,7 @@ export function LayoutClient({ children }: { children: React.ReactNode }) {
   return (
     <QueryProvider>
       <div className="flex min-h-screen bg-black relative">
-        {/* Mouse follow glow — behind everything */}
+        {/* Mouse follow glow — renders behind everything via z-index 0 */}
         <MouseGlow />
 
         {/* Sidebar */}
