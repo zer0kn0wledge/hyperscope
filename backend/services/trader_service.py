@@ -25,6 +25,11 @@ logger = logging.getLogger(__name__)
 SEED_WHALE_ADDRESSES: list[str] = [
     "0xdfc24b077bc1425ad1dea75bcb6f8158e10df303",  # HLP vault
     "0xfefefefefefefefefefefefefefefefefefefefe",   # AF
+    "0x839b10e45ec21c2ea72c95bd29ebba3ed6c65f2f",  # large trader
+    "0x3d3b0d9e0aa53a3dc2bba7e6da1b2d0da5f1d9e0",  # large trader 2
+    "0x2fbefc2e15a42ed63ded400c4547de424e9c8990",  # large trader 3
+    "0x020becc206b91579b18d8e9b20f8c4a2f4a89ba0",  # large trader 4
+    "0xd11f42756dff19e6c96c2f3e0a3de6cd0e9e22f5",  # large trader 5
 ]
 
 
@@ -210,11 +215,9 @@ class TraderService:
             "pnl_history": [],
         }
 
-        # Portfolio structure varies — handle both list and dict
         if isinstance(portfolio, list):
             for entry in portfolio:
                 if isinstance(entry, list) and len(entry) == 2:
-                    # [date_str, value] format
                     result["pnl_history"].append({
                         "date": entry[0],
                         "value": float(entry[1]) if entry[1] else 0.0,
@@ -281,6 +284,18 @@ class TraderService:
             return []
         return raw if isinstance(raw, list) else []
 
+    async def _discover_top_addresses(self) -> None:
+        """Discover top addresses from vault summaries and known sources."""
+        try:
+            vaults = await hl_client.vault_summaries()
+            if isinstance(vaults, list):
+                for v in vaults[:20]:
+                    leader = v.get("leader", "")
+                    if leader:
+                        self._monitored_addresses.add(leader.lower())
+        except Exception:
+            pass
+
     async def get_leaderboard(
         self,
         sort_by: str = "account_value",
@@ -295,8 +310,9 @@ class TraderService:
         if cached is not None:
             return cached[:limit]
 
-        # Fetch state for all monitored addresses concurrently
-        addresses = list(self._monitored_addresses)[:200]  # cap at 200
+        await self._discover_top_addresses()
+
+        addresses = list(self._monitored_addresses)[:200]
 
         states = await asyncio.gather(
             *[hl_client.clearinghouse_state(addr) for addr in addresses],
@@ -325,7 +341,6 @@ class TraderService:
             except (TypeError, ValueError):
                 continue
 
-        # Sort
         sort_keys = {
             "account_value": lambda x: x["account_value"],
             "unrealized_pnl": lambda x: x["unrealized_pnl"],
@@ -333,7 +348,6 @@ class TraderService:
         sort_fn = sort_keys.get(sort_by, sort_keys["account_value"])
         leaderboard.sort(key=sort_fn, reverse=True)
 
-        # Add ranks
         for i, entry in enumerate(leaderboard, start=1):
             entry["rank"] = i
 
