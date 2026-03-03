@@ -368,3 +368,9 @@ input::placeholder {
   color: rgba(255, 255, 255, 0.7);
   background: rgba(255, 255, 255, 0.04);
 }
+
+/* ─── Skeleton shimmer animation (used by Skeleton.tsx) ────────────────────── */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

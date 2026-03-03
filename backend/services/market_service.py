@@ -557,24 +557,9 @@ class MarketService:
                     except (TypeError, ValueError):
                         continue
 
-            # If CoinGlass also failed, try building from current snapshot
+            # No volume history available from any source
             if not result:
-                # Generate last 30 days of synthetic data from current daily volume
-                try:
-                    kpis = await self.get_kpis()
-                    current_vol = float(kpis.get("total_volume_24h", 0) or 0)
-                    if current_vol > 0:
-                        now = int(time.time() * 1000)
-                        for i in range(30):
-                            # Add slight variation for realistic chart
-                            import random
-                            variation = 0.8 + random.random() * 0.4
-                            result.append({
-                                "timestamp": now - (29 - i) * 86_400_000,
-                                "total_volume": current_vol * variation,
-                            })
-                except Exception:
-                    pass
+                logger.warning("No volume history available — returning empty list")
 
             if result:
                 result.sort(key=lambda x: x["timestamp"])

@@ -147,31 +147,70 @@ class TimeSeriesBuffer:
 class SpreadHistoryBuffer:
     """
     Specialized buffer for tracking bid/ask spread history per asset.
-    Stores {asset: deque[(timestamp, spread_bps)]} up to max_age_seconds.
+    Stores {asset: deque[dict]} where each dict has keys:
+      timestamp, spread_bps, spread_usd, mid_price
+    Evicts entries older than max_age_seconds.
     """
 
     def __init__(self, max_age_seconds: float = 3_600) -> None:
-        self._data: dict[str, deque[tuple[float, float]]] = {}
+        self._data: dict[str, deque[dict]] = {}
         self._lock = asyncio.Lock()
         self._max_age = max_age_seconds
 
-    async def append(self, asset: str, spread_bps: float) -> None:
-        """Append a new spread observation for the given asset."""
-        now = time.time()
-        async with self._lock:
-            if asset not in self._data:
-                self._data[asset] = deque()
-            self._data[asset].append((now, spread_bps))
-            cutoff = now - self._max_age
-            while self._data[asset] and self._data[asset][0][0] < cutoff:
-                self._data[asset].popleft()
+    async def record(
+        self,
+        pair: str,
+        spread_bps: float,
+        spread_usd: float = 0.0,
+        mid_price: float = 0.0,
+    ) -> None:
+        """Record a new spread observation for the given pair.
 
-    async def get_asset(self, asset: str) -> list[tuple[float, float]]:
-        """Return spread history for a specific asset."""
+        Stores (timestamp, spread_bps, spread_usd, mid_price) as a dict.
+        This is the primary method called by orderbook_service.
+        """
+        now = time.time()
+        entry: dict = {
+            "timestamp": now,
+            "spread_bps": spread_bps,
+            "spread_usd": spread_usd,
+            "mid_price": mid_price,
+        }
+        async with self._lock:
+            if pair not in self._data:
+                self._data[pair] = deque()
+            self._data[pair].append(entry)
+            cutoff = now - self._max_age
+            while self._data[pair] and self._data[pair][0]["timestamp"] < cutoff:
+                self._data[pair].popleft()
+
+    async def append(self, asset: str, spread_bps: float) -> None:
+        """Backward-compatible append method.
+
+        Delegates to .record() with spread_usd=0 and mid_price=0.
+        """
+        await self.record(pair=asset, spread_bps=spread_bps)
+
+    async def get_history(
+        self,
+        pair: str,
+        window_hours: float = 1.0,
+    ) -> list[dict]:
+        """Return spread history for a pair within the last window_hours.
+
+        Each entry is a dict with keys: timestamp, spread_bps, spread_usd, mid_price.
+        """
+        cutoff = time.time() - window_hours * 3_600
+        async with self._lock:
+            buf = self._data.get(pair, deque())
+            return [e for e in buf if e["timestamp"] >= cutoff]
+
+    async def get_asset(self, asset: str) -> list[dict]:
+        """Return full spread history for a specific asset as a list of dicts."""
         async with self._lock:
             return list(self._data.get(asset, []))
 
-    async def get_all(self) -> dict[str, list[tuple[float, float]]]:
+    async def get_all(self) -> dict[str, list[dict]]:
         """Return spread history for all assets."""
         async with self._lock:
             return {asset: list(buf) for asset, buf in self._data.items()}

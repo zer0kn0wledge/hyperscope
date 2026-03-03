@@ -24,10 +24,17 @@ export function SpreadTracker({ pair }: Props) {
     }),
   );
 
+  if (chartData.length === 0)
+    return (
+      <div className="card h-40 flex items-center justify-center">
+        <span className="text-white/30 font-mono text-xs">No spread data</span>
+      </div>
+    );
+
   return (
     <div className="card">
       <h3 className="text-xs font-mono text-white/40 mb-2">Spread History</h3>
-      <AreaChartWidget data={chartData} dataKeys={['value']} height={120} />
+      <AreaChartWidget data={chartData} dataKey="value" height={120} />
     </div>
   );
 }

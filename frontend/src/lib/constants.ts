@@ -18,7 +18,8 @@ export const CANDLE_INTERVALS = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'] as 
 export type CandleInterval = typeof CANDLE_INTERVALS[number];
 
 /* ── API ──────────────────────────────────────────── */
-export const API_BASE = 'https://hyperscope-production-7084.up.railway.app/api';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://hyperscope-production-7084.up.railway.app/api';
+export const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'wss://hyperscope-production-7084.up.railway.app';
 
 /* ── Timing ───────────────────────────────────────── */
 export const REFRESH_INTERVAL = 30_000; // 30 s

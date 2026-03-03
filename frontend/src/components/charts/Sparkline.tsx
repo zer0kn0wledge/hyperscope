@@ -1,5 +1,6 @@
 'use client';
 
+import { useId } from 'react';
 import {
   AreaChart,
   Area,
@@ -39,7 +40,8 @@ export function Sparkline({
 }: SparklineProps) {
   if (!data || data.length === 0) return null;
 
-  const gradId = `spark-grad-${Math.random().toString(36).slice(2, 7)}`;
+  const id = useId();
+  const gradId = `spark-grad-${id}`;
   const domain: [number | string, number | string] = baselineZero ? [0, 'dataMax'] : ['dataMin', 'dataMax'];
 
   return (

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import { PageContainer, SectionHeader } from '@/components/layout/PageContainer';
 import { useAPIHealth } from '@/hooks/useAPI';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { API_BASE } from '@/lib/constants';
 
 function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
@@ -60,10 +60,10 @@ function StatusDot({ ok }: { ok: boolean }) {
 }
 
 export default function SettingsPage() {
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [compactMode, setCompactMode] = useState(false);
-  const [showAnimations, setShowAnimations] = useState(true);
-  const [refreshInterval, setRefreshInterval] = useState<30 | 60 | 120>(30);
+  const [autoRefresh, setAutoRefresh] = useLocalStorage('hyperscope-auto-refresh', true);
+  const [compactMode, setCompactMode] = useLocalStorage('hyperscope-compact-mode', false);
+  const [showAnimations, setShowAnimations] = useLocalStorage('hyperscope-animations', true);
+  const [refreshInterval, setRefreshInterval] = useLocalStorage<30 | 60 | 120>('hyperscope-refresh-interval', 30);
 
   const { data: health, isLoading: healthLoading, refetch: refetchHealth } = useAPIHealth();
   const isConnected = !healthLoading && !!(health as any)?.status;

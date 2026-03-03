@@ -71,7 +71,7 @@ export const fmt = {
   address(addr: string): string {
     if (!addr) return NULL_DISPLAY;
     if (addr.length <= 12) return addr;
-    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+    return `${addr.slice(0, 6)}\u2026${addr.slice(-4)}`;
   },
 
   /**
@@ -84,3 +84,13 @@ export const fmt = {
     return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
   },
 };
+
+// Named exports for convenience
+export const formatUSD = (v: unknown, decimals?: number) => fmt.usd(v, decimals);
+export const formatPercent = (v: unknown, decimals?: number) => fmt.pct(v, decimals);
+export const formatFunding = (v: unknown) => fmt.funding(v);
+export const fundingClass = (rate: number) => (rate >= 0 ? 'text-neon' : 'text-red');
+export const formatPrice = (v: unknown) => fmt.price(v);
+export const formatNum = (v: unknown, decimals?: number) => fmt.num(v, decimals);
+export const formatAddress = (addr: string) => fmt.address(addr);
+export const formatTimestamp = (v: unknown) => fmt.timestamp(v);

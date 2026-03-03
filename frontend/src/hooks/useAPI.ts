@@ -241,3 +241,64 @@ export function useAPIHealth() {
     retry: 1,
   });
 }
+
+// ─── Aliases (backward compatibility) ────────────────────────────────────
+export const useAccountSummary = useTraderSummary;
+export const usePositions = useTraderPositions;
+export const useFills = useTraderFills;
+export const useUserFundingHistory = (address: string) => {
+  return useQuery({
+    queryKey: ['trader-funding', address],
+    queryFn: () => tradersAPI.fundingHistory(address),
+    staleTime: STALE_TIME,
+    refetchInterval: 60_000,
+    retry: RETRY,
+    enabled: !!address,
+  });
+};
+export const usePnLChart = useTraderPnL;
+export const useOpenOrders = (address: string) => {
+  return useQuery({
+    queryKey: ['trader-orders', address],
+    queryFn: () => tradersAPI.orders(address),
+    staleTime: STALE_TIME,
+    refetchInterval: REFRESH_INTERVAL,
+    retry: RETRY,
+    enabled: !!address,
+  });
+};
+
+// Markets page extras
+export function useAssetLiquidations(asset: string) {
+  return useQuery({
+    queryKey: ['asset-liquidations', asset],
+    queryFn: () => marketsAPI.liquidations(asset),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    retry: RETRY,
+    enabled: !!asset,
+  });
+}
+
+export function useAssetTakerVolume(asset: string) {
+  return useQuery({
+    queryKey: ['asset-taker-volume', asset],
+    queryFn: () => marketsAPI.takerVolume(asset),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    retry: RETRY,
+    enabled: !!asset,
+  });
+}
+
+// Orderbook extras
+export function useLargeOrders(pair: string) {
+  return useQuery({
+    queryKey: ['large-orders', pair],
+    queryFn: () => orderbookAPI.largeOrders(pair),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    retry: RETRY,
+    enabled: !!pair,
+  });
+}

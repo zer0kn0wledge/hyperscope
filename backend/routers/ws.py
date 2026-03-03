@@ -322,16 +322,30 @@ async def ws_candle(websocket: WebSocket, pair: str, interval: str) -> None:
 
 @router.websocket("/liquidations")
 async def ws_liquidations(websocket: WebSocket) -> None:
-    """
-    Aggregated liquidation events.
-    Proxies HL userEvents feed for liquidation monitoring.
-    Note: Due to HL's 10-user subscription limit, this streams from
-    general trade feeds filtered for large price moves.
-    """
-    # Use allMids as a proxy stream -- actual liquidation events
-    # come from userEvents which require specific addresses
-    subscription = {"type": "allMids", "dex": ""}
-    await _proxy_subscription(websocket, subscription)
+    """Aggregated liquidation events via REST polling."""
+    await websocket.accept()
+    try:
+        from services.market_service import market_service
+        while True:
+            try:
+                # Poll liquidation data for major assets
+                results = []
+                for coin in ["BTC", "ETH", "SOL"]:
+                    try:
+                        data = await market_service.get_liquidations(coin)
+                        if data:
+                            results.extend(data)
+                    except Exception:
+                        pass
+                if results:
+                    await websocket.send_json({"channel": "liquidations", "data": results})
+            except Exception as e:
+                logger.warning("Liquidation poll failed: %s", e)
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error("Liquidation WS error: %s", e)
 
 
 @router.websocket("/active-asset/{pair}")

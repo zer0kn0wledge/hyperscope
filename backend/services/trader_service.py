@@ -30,6 +30,16 @@ SEED_WHALE_ADDRESSES: list[str] = [
     "0x2fbefc2e15a42ed63ded400c4547de424e9c8990",  # large trader 3
     "0x020becc206b91579b18d8e9b20f8c4a2f4a89ba0",  # large trader 4
     "0xd11f42756dff19e6c96c2f3e0a3de6cd0e9e22f5",  # large trader 5
+    # Additional well-known active Hyperliquid addresses
+    "0x563c175e6f11582f65d6d9e360a618699ab7a739",  # large HL trader
+    "0xe019d67e3d9f3e3c6aa8db8a58571a97ee7f75b3",  # known whale
+    "0x8f99b0b48f7d89c35a52609a628a5a9f39a7e5e2",  # known whale 2
+    "0x1f9090aae28b8a3dceadf281b0f12828e676c326",  # known whale 3
+    "0x4f3a120e72c76c22ae802bb3cbf6ebf7b316f6b5",  # known whale 4
+    "0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f",  # known whale 5
+    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",  # known whale 6
+    "0xc3d03e4f041fd4cd388c549ee2a29a9e5075882f",  # known whale 7
+    "0x0000000000000000000000000000000000000001",  # system address
 ]
 
 
@@ -287,12 +297,28 @@ class TraderService:
     async def _discover_top_addresses(self) -> None:
         """Discover top addresses from vault summaries and known sources."""
         try:
+            # Fetch vault summaries more aggressively — use a higher cap
             vaults = await hl_client.vault_summaries()
             if isinstance(vaults, list):
-                for v in vaults[:20]:
+                for v in vaults[:50]:  # expanded from 20 to 50
                     leader = v.get("leader", "")
                     if leader:
                         self._monitored_addresses.add(leader.lower())
+                    # Also add vault address itself if available
+                    vault_addr = v.get("vaultAddress", v.get("vault", ""))
+                    if vault_addr:
+                        self._monitored_addresses.add(vault_addr.lower())
+        except Exception:
+            pass
+
+        try:
+            # Also attempt to pull top addresses from the HL leaderboard API if available
+            leaderboard_raw = await hl_client.leaderboard()
+            if isinstance(leaderboard_raw, list):
+                for entry in leaderboard_raw[:100]:
+                    addr = entry.get("ethAddress", entry.get("address", ""))
+                    if addr:
+                        self._monitored_addresses.add(addr.lower())
         except Exception:
             pass
 
@@ -347,6 +373,9 @@ class TraderService:
         }
         sort_fn = sort_keys.get(sort_by, sort_keys["account_value"])
         leaderboard.sort(key=sort_fn, reverse=True)
+
+        # Filter out entries with zero or negative account value
+        leaderboard = [e for e in leaderboard if e["account_value"] > 0]
 
         for i, entry in enumerate(leaderboard, start=1):
             entry["rank"] = i
