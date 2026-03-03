@@ -58,6 +58,30 @@ export function useTVLData() {
   });
 }
 
+// ─── Protocol Volume ─────────────────────────────────────────────────────
+
+export function useProtocolVolume() {
+  return useQuery({
+    queryKey: ['protocol-volume'],
+    queryFn: protocolAPI.volume,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    retry: RETRY,
+  });
+}
+
+// ─── Protocol Fees ───────────────────────────────────────────────────────
+
+export function useProtocolFees() {
+  return useQuery({
+    queryKey: ['protocol-fees'],
+    queryFn: protocolAPI.fees,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    retry: RETRY,
+  });
+}
+
 // ─── Markets ─────────────────────────────────────────────────────────────
 
 export function useAllAssets() {

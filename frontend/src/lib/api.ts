@@ -97,6 +97,7 @@ export const protocolAPI = {
   fees: (period?: string) => fetcher<any>('/protocol/fees', period ? { period } : undefined),
   revenue: () => fetcher<any>('/protocol/revenue'),
   tvl: () => fetcher<any>('/protocol/tvl'),
+  volume: () => fetcher<any>('/protocol/volume'),
   vaults: () => fetcher<any>('/protocol/hlp'),
 };
 

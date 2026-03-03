@@ -9,7 +9,7 @@ import { KPICard } from '@/components/ui/KPICard';
 import { DataTable, Column } from '@/components/ui/DataTable';
 import { SkeletonCard, SkeletonChart, SkeletonTable } from '@/components/ui/Skeleton';
 import { Badge } from '@/components/ui/Badge';
-import { useProtocolStats, useVaultList, useStakingStats } from '@/hooks/useAPI';
+import { useProtocolStats, useVaultList, useStakingStats, useTVLData, useProtocolVolume, useProtocolFees } from '@/hooks/useAPI';
 import { fmt } from '@/lib/format';
 import { CHART_COLORS } from '@/lib/constants';
 
@@ -32,35 +32,53 @@ export default function ProtocolPage() {
   const { data: hypeData, isLoading: statsLoading } = useProtocolStats();
   const { data: hlpData, isLoading: vaultsLoading } = useVaultList();
   const { data: staking, isLoading: stakingLoading } = useStakingStats();
+  const { data: tvlData, isLoading: tvlLoading } = useTVLData();
+  const { data: volumeData, isLoading: volumeLoading } = useProtocolVolume();
+  const { data: feesData, isLoading: feesLoading } = useProtocolFees();
 
   const stats = hypeData as any;
   const hlp = hlpData as any;
   const stakingStats = staking as any;
+  const tvlRaw = tvlData as any;
+  const volRaw = volumeData as any;
+  const feeRaw = feesData as any;
 
+  // TVL history from /protocol/tvl -> { tvl_history: [{ date, totalLiquidityUSD }] }
   const tvlHistory = useMemo(() => {
-    const history = stats?.tvl_history ?? stats?.history ?? [];
+    const history = tvlRaw?.tvl_history ?? [];
     if (!Array.isArray(history)) return [];
-    return history.map((d: any) => ({ time: new Date((d.time ?? d.date ?? 0) * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), tvl: d.tvl ?? d.value ?? 0 }));
-  }, [stats]);
+    return history.map((d: any) => ({
+      time: new Date((d.date ?? d.time ?? 0) * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      tvl: d.totalLiquidityUSD ?? d.tvl ?? d.value ?? 0,
+    }));
+  }, [tvlRaw]);
 
+  // Volume history from /protocol/volume -> { daily_chart: [{ date, volume_estimate }] }
   const volumeHistory = useMemo(() => {
-    const history = stats?.volume_history ?? [];
+    const history = volRaw?.daily_chart ?? [];
     if (!Array.isArray(history)) return [];
-    return history.map((d: any) => ({ time: new Date((d.time ?? d.date ?? 0) * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), volume: d.volume ?? d.value ?? 0 }));
-  }, [stats]);
+    return history.map((d: any) => ({
+      time: new Date((d.date ?? d.time ?? 0) * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      volume: d.volume_estimate ?? d.volume ?? d.value ?? 0,
+    }));
+  }, [volRaw]);
 
+  // Fee history from /protocol/fees -> { daily_chart: [{ date, fees }] }
   const feeHistory = useMemo(() => {
-    const history = stats?.fee_history ?? [];
+    const history = feeRaw?.daily_chart ?? [];
     if (!Array.isArray(history)) return [];
-    return history.map((d: any) => ({ time: new Date((d.time ?? d.date ?? 0) * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), fees: d.fees ?? d.value ?? 0 }));
-  }, [stats]);
+    return history.map((d: any) => ({
+      time: new Date((d.date ?? d.time ?? 0) * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      fees: d.fees ?? d.value ?? 0,
+    }));
+  }, [feeRaw]);
 
   const vaultColumns: Column[] = [
     { key: 'name', label: 'Vault', render: (val: string) => <span style={{ color: '#e8e8e8', fontWeight: 500 }}>{val}</span> },
     { key: 'tvl', label: 'TVL', align: 'right', sortable: true, render: (val: number) => fmt.usd(val) },
-    { key: 'apy', label: 'APY / Return', align: 'right', sortable: true, render: (val: number) => val != null ? <span style={{ color: val >= 0 ? CHART_COLORS.neon : CHART_COLORS.red }}>{(val * 100).toFixed(2)}%</span> : '—' },
-    { key: 'followers', label: 'Depositors', align: 'right', sortable: true, render: (val: number) => val?.toLocaleString() ?? '—' },
-    { key: 'description', label: 'Info', render: (val: string) => val ? <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem' }}>{val}</span> : '—' },
+    { key: 'apy', label: 'APY / Return', align: 'right', sortable: true, render: (val: number) => val != null ? <span style={{ color: val >= 0 ? CHART_COLORS.neon : CHART_COLORS.red }}>{(val * 100).toFixed(2)}%</span> : '\u2014' },
+    { key: 'followers', label: 'Depositors', align: 'right', sortable: true, render: (val: number) => val?.toLocaleString() ?? '\u2014' },
+    { key: 'description', label: 'Info', render: (val: string) => val ? <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem' }}>{val}</span> : '\u2014' },
   ];
 
   const vaultRows: any[] = useMemo(() => {
@@ -77,8 +95,13 @@ export default function ProtocolPage() {
   const hypeCirculating = stats?.circulating_supply ?? stats?.circulatingSupply ?? null;
   const hypeChange24h = stats?.change_24h ?? stats?.price_change_24h ?? null;
 
-  const totalStakedDisplay = stakingStats?.total_staked != null ? `${Number(stakingStats.total_staked).toLocaleString()} HYPE` : '—';
-  const aprDisplay = stakingStats?.average_apr != null ? `${(stakingStats.average_apr * 100).toFixed(2)}%` : stakingStats?.apr != null ? `${(stakingStats.apr * 100).toFixed(2)}%` : '—';
+  // Protocol-level KPIs from dedicated endpoints
+  const currentTVL = tvlRaw?.current_tvl ?? null;
+  const volume24h = volRaw?.total_24h ?? null;
+  const fees24h = feeRaw?.total_24h ?? null;
+
+  const totalStakedDisplay = stakingStats?.total_staked != null ? `${Number(stakingStats.total_staked).toLocaleString()} HYPE` : '\u2014';
+  const aprDisplay = stakingStats?.average_apr != null ? `${(stakingStats.average_apr * 100).toFixed(2)}%` : stakingStats?.apr != null ? `${(stakingStats.apr * 100).toFixed(2)}%` : '\u2014';
 
   return (
     <PageContainer>
@@ -87,21 +110,29 @@ export default function ProtocolPage() {
         <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.35)', margin: 0, fontFamily: 'Inter, sans-serif' }}>Hyperliquid protocol metrics, vaults, and staking</p>
       </div>
 
+      {/* HYPE Token KPIs */}
       {statsLoading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>{[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-          <KPICard label="HYPE Price" value={hypePrice != null ? `$${fmt.price(hypePrice)}` : '—'} sub="current price" change={hypeChange24h} />
-          <KPICard label="Market Cap" value={hypeMarketCap != null ? fmt.usd(hypeMarketCap) : '—'} sub={hypeFDV != null ? `FDV ${fmt.usd(hypeFDV)}` : 'fully diluted'} />
-          <KPICard label="Circulating Supply" value={hypeCirculating != null ? Number(hypeCirculating).toLocaleString() : '—'} sub="HYPE tokens" />
-          <KPICard label="24h Change" value={hypeChange24h != null ? `${hypeChange24h >= 0 ? '+' : ''}${(hypeChange24h * 100).toFixed(2)}%` : '—'} sub="price change" change={hypeChange24h} />
+          <KPICard label="HYPE Price" value={hypePrice != null ? `$${fmt.price(hypePrice)}` : '\u2014'} sub="current price" change={hypeChange24h} />
+          <KPICard label="Market Cap" value={hypeMarketCap != null ? fmt.usd(hypeMarketCap) : '\u2014'} sub={hypeFDV != null ? `FDV ${fmt.usd(hypeFDV)}` : 'fully diluted'} />
+          <KPICard label="Circulating Supply" value={hypeCirculating != null ? Number(hypeCirculating).toLocaleString() : '\u2014'} sub="HYPE tokens" />
+          <KPICard label="24h Change" value={hypeChange24h != null ? `${hypeChange24h >= 0 ? '+' : ''}${(hypeChange24h * 100).toFixed(2)}%` : '\u2014'} sub="price change" change={hypeChange24h} />
         </div>
       )}
+
+      {/* Protocol KPIs: TVL, Volume, Fees */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+        <KPICard label="Total Value Locked" value={currentTVL != null ? fmt.usd(currentTVL) : tvlLoading ? '...' : '\u2014'} sub="protocol TVL" />
+        <KPICard label="24h Volume" value={volume24h != null ? fmt.usd(volume24h) : volumeLoading ? '...' : '\u2014'} sub="trading volume" />
+        <KPICard label="24h Fees" value={fees24h != null ? fmt.usd(fees24h) : feesLoading ? '...' : '\u2014'} sub="fee revenue" />
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
         <div className="card" style={{ padding: '1.25rem' }}>
           <SectionHeader title="TVL History" subtitle="Protocol total value locked" />
-          {statsLoading ? <SkeletonChart height={200} /> : tvlHistory.length === 0 ? (
+          {tvlLoading ? <SkeletonChart height={200} /> : tvlHistory.length === 0 ? (
             <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '0.8125rem', fontFamily: 'JetBrains Mono, monospace' }}>no data</div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
@@ -118,7 +149,7 @@ export default function ProtocolPage() {
         </div>
         <div className="card" style={{ padding: '1.25rem' }}>
           <SectionHeader title="Daily Volume" subtitle="Protocol trading volume history" />
-          {statsLoading ? <SkeletonChart height={200} /> : volumeHistory.length === 0 ? (
+          {volumeLoading ? <SkeletonChart height={200} /> : volumeHistory.length === 0 ? (
             <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '0.8125rem', fontFamily: 'JetBrains Mono, monospace' }}>no data</div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
@@ -136,7 +167,7 @@ export default function ProtocolPage() {
 
       <div className="card" style={{ padding: '1.25rem', marginBottom: '1.5rem' }}>
         <SectionHeader title="Fee Revenue" subtitle="Daily protocol fees collected" />
-        {statsLoading ? <SkeletonChart height={180} /> : feeHistory.length === 0 ? (
+        {feesLoading ? <SkeletonChart height={180} /> : feeHistory.length === 0 ? (
           <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: '0.8125rem', fontFamily: 'JetBrains Mono, monospace' }}>no data</div>
         ) : (
           <ResponsiveContainer width="100%" height={180}>
@@ -156,7 +187,7 @@ export default function ProtocolPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <KPICard label="Total Staked" value={totalStakedDisplay} sub="HYPE staked" />
           <KPICard label="Staking APR" value={aprDisplay} sub="annualized yield" />
-          <KPICard label="Validators" value={stakingStats.validator_count != null ? String(stakingStats.validator_count) : '—'} sub="active validators" />
+          <KPICard label="Validators" value={stakingStats.validator_count != null ? String(stakingStats.validator_count) : '\u2014'} sub="active validators" />
         </div>
       )}
 
