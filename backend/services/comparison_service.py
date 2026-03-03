@@ -470,17 +470,18 @@ class ComparisonService:
             try:
                 pm_data = await coinglass_client.pairs_markets_by_symbol(symbol=symbol)
                 now_ms = int(time.time() * 1000)
-                pm_by_exchange = {item["exchange_name"].lower(): item for item in pm_data if isinstance(item, dict)}
+                # Build per-exchange totals by summing OI across all instruments (perps + futures)
+                pm_oi_totals: dict[str, float] = {}
+                for item in pm_data:
+                    ex = item.get("exchange_name", "").lower() if isinstance(item, dict) else ""
+                    if ex:
+                        pm_oi_totals[ex] = pm_oi_totals.get(ex, 0) + float(item.get("open_interest_usd", 0) or 0)
 
-                if not binance_parsed and "binance" in pm_by_exchange:
-                    oi_val = pm_by_exchange["binance"].get("open_interest_usd", 0)
-                    if oi_val > 0:
-                        binance_parsed = [{"time": now_ms, "oi_usd": oi_val}]
+                if not binance_parsed and pm_oi_totals.get("binance", 0) > 0:
+                    binance_parsed = [{"time": now_ms, "oi_usd": pm_oi_totals["binance"]}]
 
-                if not bybit_parsed and "bybit" in pm_by_exchange:
-                    oi_val = pm_by_exchange["bybit"].get("open_interest_usd", 0)
-                    if oi_val > 0:
-                        bybit_parsed = [{"time": now_ms, "oi_usd": oi_val}]
+                if not bybit_parsed and pm_oi_totals.get("bybit", 0) > 0:
+                    bybit_parsed = [{"time": now_ms, "oi_usd": pm_oi_totals["bybit"]}]
             except Exception as exc:
                 logger.debug("[comparison] CoinGlass pairs-markets fallback for OI failed: %s", exc)
 
@@ -527,7 +528,7 @@ class ComparisonService:
             if not isinstance(data, list): return []
             return [{"time": int(d.get("time", 0)), "rate": float(d.get("fundingRate", 0) or 0), "interval_hours": 1} for d in data if isinstance(d, dict)]
 
-        # ── Geo-block fallback for Binance/Bybit funding ────────────────────────────────────
+        # ── Geo-block fallback for Binance/Bybit funding ────────────────────
         binance_parsed = parse_binance_f(binance_f)
         bybit_parsed = parse_bybit_f(bybit_f)
 
@@ -535,15 +536,22 @@ class ComparisonService:
             try:
                 pm_data = await coinglass_client.pairs_markets_by_symbol(symbol=symbol)
                 now_ms = int(time.time() * 1000)
-                pm_by_exchange = {item["exchange_name"].lower(): item for item in pm_data if isinstance(item, dict)}
+                # Pick the FIRST (highest-volume) perpetual instrument per exchange for funding rate
+                pm_first: dict[str, dict] = {}
+                for item in pm_data:
+                    if not isinstance(item, dict):
+                        continue
+                    ex = item.get("exchange_name", "").lower()
+                    if ex and ex not in pm_first and item.get("funding_rate") is not None:
+                        pm_first[ex] = item
 
-                if not binance_parsed and "binance" in pm_by_exchange:
-                    rate = pm_by_exchange["binance"].get("funding_rate", 0)
+                if not binance_parsed and "binance" in pm_first:
+                    rate = float(pm_first["binance"].get("funding_rate", 0) or 0)
                     if rate != 0:
                         binance_parsed = [{"time": now_ms, "rate": rate, "interval_hours": 8}]
 
-                if not bybit_parsed and "bybit" in pm_by_exchange:
-                    rate = pm_by_exchange["bybit"].get("funding_rate", 0)
+                if not bybit_parsed and "bybit" in pm_first:
+                    rate = float(pm_first["bybit"].get("funding_rate", 0) or 0)
                     if rate != 0:
                         bybit_parsed = [{"time": now_ms, "rate": rate, "interval_hours": 8}]
             except Exception as exc:
@@ -721,31 +729,24 @@ class ComparisonService:
         if not result["exchanges"] or all(e.get("long_liq_usd", 0) == 0 and e.get("short_liq_usd", 0) == 0 for e in result["exchanges"]):
             try:
                 pm_data = await coinglass_client.pairs_markets_by_symbol(symbol=symbol)
-                pm_exchanges = []
-                EXCHANGE_NAMES = {"Binance", "Bybit", "OKX"}
+                # Aggregate liquidations across all instruments per exchange
+                liq_totals: dict[str, dict[str, float]] = {}
+                EXCHANGE_NAMES = {"Binance", "Bybit", "OKX", "Hyperliquid"}
                 for item in pm_data:
                     ex_name = item.get("exchange_name", "")
                     if ex_name in EXCHANGE_NAMES:
-                        long_liq = float(item.get("long_liquidation_usd_24h", 0) or 0)
-                        short_liq = float(item.get("short_liquidation_usd_24h", 0) or 0)
-                        if long_liq > 0 or short_liq > 0:
-                            pm_exchanges.append({
-                                "exchange": ex_name,
-                                "long_liq_usd": long_liq,
-                                "short_liq_usd": short_liq,
-                            })
-                # Also add Hyperliquid from pairs-markets if available
-                for item in pm_data:
-                    if item.get("exchange_name") == "Hyperliquid":
-                        long_liq = float(item.get("long_liquidation_usd_24h", 0) or 0)
-                        short_liq = float(item.get("short_liquidation_usd_24h", 0) or 0)
-                        if long_liq > 0 or short_liq > 0:
-                            pm_exchanges.append({
-                                "exchange": "Hyperliquid",
-                                "long_liq_usd": long_liq,
-                                "short_liq_usd": short_liq,
-                            })
-                        break
+                        if ex_name not in liq_totals:
+                            liq_totals[ex_name] = {"long": 0.0, "short": 0.0}
+                        liq_totals[ex_name]["long"] += float(item.get("long_liquidation_usd_24h", 0) or 0)
+                        liq_totals[ex_name]["short"] += float(item.get("short_liquidation_usd_24h", 0) or 0)
+                pm_exchanges = []
+                for ex_name, totals in liq_totals.items():
+                    if totals["long"] > 0 or totals["short"] > 0:
+                        pm_exchanges.append({
+                            "exchange": ex_name,
+                            "long_liq_usd": totals["long"],
+                            "short_liq_usd": totals["short"],
+                        })
                 if pm_exchanges:
                     result["exchanges"] = pm_exchanges
                     result["data_source"] = "coinglass_pairs_markets"
@@ -1003,7 +1004,7 @@ class ComparisonService:
         result: list[dict[str, Any]] = []
         exchange_lower = exchange.lower()
 
-        # ── Hyperliquid / generic DEX ────────────────────────────────────
+        # ── Hyperliquid / generic DEX ───────────────────────────────────
         if exchange_lower in ("hyperliquid", "hl"):
             # Map caller interval to CoinGlass V4 h-prefixed format
             INTERVAL_MAP = {
@@ -1038,7 +1039,7 @@ class ComparisonService:
             except Exception as exc:
                 logger.warning("[comparison] aggregated_taker_volume_v2 failed for HL: %s", exc)
 
-        # ── Binance ─────────────────────────────────────────────────────────────
+        # ── Binance ──────────────────────────────────────────────────────────────────────
         elif exchange_lower == "binance":
             binance_sym = f"{symbol}USDT"
             # Map interval to Binance klines format
@@ -1070,7 +1071,7 @@ class ComparisonService:
             except Exception as exc:
                 logger.warning("[comparison] Binance klines volume failed: %s", exc)
 
-        # ── OKX ─────────────────────────────────────────────────────────────────
+        # ── OKX ───────────────────────────────────────────────────────────────────────────
         elif exchange_lower == "okx":
             okx_inst = f"{symbol}-USDT-SWAP"
             OKX_PERIOD_MAP = {
@@ -1099,7 +1100,7 @@ class ComparisonService:
             except Exception as exc:
                 logger.warning("[comparison] OKX taker volume failed: %s", exc)
 
-        # ── Bybit ────────────────────────────────────────────────────────────────
+        # ── Bybit ────────────────────────────────────────────────────────────────────────────
         elif exchange_lower == "bybit":
             bybit_sym = f"{symbol}USDT"
             # Bybit klines interval: "60" = 1h, "240" = 4h, "D" = 1d
@@ -1129,7 +1130,7 @@ class ComparisonService:
             except Exception as exc:
                 logger.warning("[comparison] Bybit klines volume failed: %s", exc)
 
-        # ── Generic fallback via CoinGlass aggregated_taker_volume_v2 ──────────────────
+        # ── Generic fallback via CoinGlass aggregated_taker_volume_v2 ────────────────────────
         if not result:
             INTERVAL_MAP = {
                 "1h": "h1", "4h": "h4", "8h": "h8", "12h": "h12",
