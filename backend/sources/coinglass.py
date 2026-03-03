@@ -195,6 +195,31 @@ class CoinGlassClient(BaseHTTPClient):
             params={"symbol": symbol, "exchange_list": exchange_list, "interval": interval, "limit": limit},
         )
 
+    async def pairs_markets_by_symbol(self, symbol: str) -> list[dict[str, Any]]:
+        """Per-exchange snapshot data for a symbol from pairs-markets.
+        
+        Returns list of dicts with: exchange_name, volume_usd, open_interest_usd,
+        funding_rate, long_liquidation_usd_24h, short_liquidation_usd_24h.
+        Useful as fallback when direct exchange APIs are geo-blocked.
+        """
+        raw = await self.get("/api/futures/pairs-markets", params={"symbol": symbol})
+        if not isinstance(raw, dict) or not raw.get("data"):
+            return []
+        result = []
+        for item in raw.get("data", []):
+            if not isinstance(item, dict):
+                continue
+            result.append({
+                "exchange_name": item.get("exchange_name", ""),
+                "instrument_id": item.get("instrument_id", ""),
+                "volume_usd": float(item.get("volume_usd", 0) or 0),
+                "open_interest_usd": float(item.get("open_interest_usd", 0) or 0),
+                "funding_rate": float(item.get("funding_rate", 0) or 0),
+                "long_liquidation_usd_24h": float(item.get("long_liquidation_usd_24h", 0) or 0),
+                "short_liquidation_usd_24h": float(item.get("short_liquidation_usd_24h", 0) or 0),
+            })
+        return result
+
 
 # Singleton instance
 coinglass_client = CoinGlassClient()

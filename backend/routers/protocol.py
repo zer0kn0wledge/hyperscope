@@ -2,6 +2,7 @@
 Protocol Router
 GET /api/protocol/fees
 GET /api/protocol/revenue
+GET /api/protocol/volume
 GET /api/protocol/af
 GET /api/protocol/hlp
 GET /api/protocol/staking
@@ -38,6 +39,16 @@ async def get_revenue() -> dict[str, Any]:
     Includes dollar amounts for 24h, 7d, and all-time periods.
     """
     return await protocol_service.get_revenue()
+
+
+@router.get("/volume", summary="Protocol trading volume")
+async def get_volume() -> dict[str, Any]:
+    """
+    Protocol trading volume derived from fee data.
+    Includes daily chart with volume estimates, plus real-time ring buffer data
+    when background monitor is running.
+    """
+    return await protocol_service.get_volume()
 
 
 @router.get("/af", summary="Assistance Fund state")
