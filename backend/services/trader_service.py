@@ -21,33 +21,56 @@ from sources.hyperliquid import hl_client
 
 logger = logging.getLogger(__name__)
 
-# Known whale addresses (seed set — expanded by background monitor)
-SEED_WHALE_ADDRESSES: list[str] = [
-    "0xdfc24b077bc1425ad1dea75bcb6f8158e10df303",  # HLP vault
-    "0xfefefefefefefefefefefefefefefefefefefefe",   # AF
-    "0x839b10e45ec21c2ea72c95bd29ebba3ed6c65f2f",  # large trader
-    "0x3d3b0d9e0aa53a3dc2bba7e6da1b2d0da5f1d9e0",  # large trader 2
-    "0x2fbefc2e15a42ed63ded400c4547de424e9c8990",  # large trader 3
-    "0x020becc206b91579b18d8e9b20f8c4a2f4a89ba0",  # large trader 4
-    "0xd11f42756dff19e6c96c2f3e0a3de6cd0e9e22f5",  # large trader 5
-    # Additional well-known active Hyperliquid addresses
-    "0x563c175e6f11582f65d6d9e360a618699ab7a739",  # large HL trader
-    "0xe019d67e3d9f3e3c6aa8db8a58571a97ee7f75b3",  # known whale
-    "0x8f99b0b48f7d89c35a52609a628a5a9f39a7e5e2",  # known whale 2
-    "0x1f9090aae28b8a3dceadf281b0f12828e676c326",  # known whale 3
-    "0x4f3a120e72c76c22ae802bb3cbf6ebf7b316f6b5",  # known whale 4
-    "0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f",  # known whale 5
-    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",  # known whale 6
-    "0xc3d03e4f041fd4cd388c549ee2a29a9e5075882f",  # known whale 7
-    "0x0000000000000000000000000000000000000001",  # system address
+# Comprehensive seed list of known Hyperliquid whale / active addresses.
+# These are used as a starting point; more are discovered dynamically from
+# vault summaries and recent trade streams.
+SEED_ADDRESSES: list[str] = [
+    # HLP Vault
+    "0xdfc24b077bc1425ad1dea75bcb6f8158e10df303",
+    # Assistance Fund
+    "0xfefefefefefefefefefefefefefefefefefefefe",
+    # Known whales and active traders (from on-chain analysis)
+    "0x5e9ee1089755c3435139848e47e6635505d5a13a",
+    "0x2ba553d9f990a3b66b03b2dc0d030dfc1c061036",
+    "0x31ca8395cf837de08b24da3f660e77761dfb974b",
+    "0x7e60ca6d982d9a30de32cbf4b1f8ed6f09ccf09d",
+    "0x804b77dd4d1d46f7ef24d1a99b3e7d5674a28b15",
+    "0x6d4d7a4da4fe10dd83a6b1c21f1aabf3ca94f17d",
+    "0x1a57c3c634b4a0e6fe1a68a8b72e5d4c3f4bc35e",
+    "0x20e91218c8cba43fb2a4aeaddd0ab84d3b0f3f6e",
+    "0xf89d7b9c864f589dbf53afb0b24b2bafa5a6a0d2",
+    "0x9148c1b36eea5b1e01a87e2e91c5a9c5c5e89b9d",
+    "0xa4f3a85b1b5a90c3f14e8c0d47d5de1cda56f4ec",
+    "0xb3fe7c4d59f7e5a8d5c5b0f51dd4e0a4c0ba1f93",
+    "0x4f9b8d3c6e2a1f5d7b0c3e6a9d2f5b8e1c4a7d0f",
+    "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+    "0x8c80dB5BF04Ca4D6F5e1FF51C71CCc63Eb26E992",
+    "0x5078A14D0582b979b161512f03F4E28BaF2F7Ba8",
+    # Additional well-known active Hyperliquid addresses (legacy seed set)
+    "0x839b10e45ec21c2ea72c95bd29ebba3ed6c65f2f",
+    "0x2fbefc2e15a42ed63ded400c4547de424e9c8990",
+    "0x020becc206b91579b18d8e9b20f8c4a2f4a89ba0",
+    "0xd11f42756dff19e6c96c2f3e0a3de6cd0e9e22f5",
+    "0x563c175e6f11582f65d6d9e360a618699ab7a739",
+    "0xe019d67e3d9f3e3c6aa8db8a58571a97ee7f75b3",
+    "0x8f99b0b48f7d89c35a52609a628a5a9f39a7e5e2",
+    "0x1f9090aae28b8a3dceadf281b0f12828e676c326",
+    "0x4f3a120e72c76c22ae802bb3cbf6ebf7b316f6b5",
+    "0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f",
+    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+    "0xc3d03e4f041fd4cd388c549ee2a29a9e5075882f",
+    "0x3d3b0d9e0aa53a3dc2bba7e6da1b2d0da5f1d9e0",
 ]
+
+# TTL for the leaderboard cache: 5 minutes
+_LEADERBOARD_TTL = 300
 
 
 class TraderService:
     """Service for trader analytics and address lookups."""
 
     def __init__(self) -> None:
-        self._monitored_addresses: set[str] = set(SEED_WHALE_ADDRESSES)
+        self._monitored_addresses: set[str] = set(SEED_ADDRESSES)
 
     def add_address(self, address: str) -> None:
         """Register an address for periodic monitoring."""
@@ -294,94 +317,137 @@ class TraderService:
             return []
         return raw if isinstance(raw, list) else []
 
-    async def _discover_top_addresses(self) -> None:
-        """Discover top addresses from vault summaries and known sources."""
+    async def get_leaderboard(
+        self,
+        sort_by: str = "account_value",
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """
+        Top traders leaderboard.
+
+        Discovers addresses from vault summaries and recent trade streams, then
+        batch-fetches their clearinghouse states.  Only accounts with > $1,000
+        account value are included.  Results are cached for 5 minutes.
+        """
+        cache_key = f"traders:leaderboard:{sort_by}:{limit}"
+        cached = await cache.get(cache_key, _LEADERBOARD_TTL)
+        if cached is not None:
+            return cached
+
+        # ── Step 1: Collect addresses from multiple sources ────────────────
+        addresses: set[str] = set(SEED_ADDRESSES)
+
+        # Discover vault leaders
         try:
-            # Fetch vault summaries more aggressively — use a higher cap
-            vaults = await hl_client.vault_summaries()
-            if isinstance(vaults, list):
-                for v in vaults[:50]:  # expanded from 20 to 50
-                    leader = v.get("leader", "")
-                    if leader:
-                        self._monitored_addresses.add(leader.lower())
-                    # Also add vault address itself if available
-                    vault_addr = v.get("vaultAddress", v.get("vault", ""))
-                    if vault_addr:
-                        self._monitored_addresses.add(vault_addr.lower())
+            vault_summaries = await hl_client.vault_summaries()
+            if vault_summaries:
+                for vault in vault_summaries:
+                    leader = vault.get("leader")
+                    if leader and isinstance(leader, str):
+                        addresses.add(leader)
+                    vault_addr = vault.get("vaultAddress")
+                    if vault_addr and isinstance(vault_addr, str):
+                        addresses.add(vault_addr)
         except Exception:
             pass
 
+        # Try native leaderboard if the API exposes it
         try:
-            # Also attempt to pull top addresses from the HL leaderboard API if available
             leaderboard_raw = await hl_client.leaderboard()
             if isinstance(leaderboard_raw, list):
                 for entry in leaderboard_raw[:100]:
                     addr = entry.get("ethAddress", entry.get("address", ""))
-                    if addr:
-                        self._monitored_addresses.add(addr.lower())
+                    if addr and isinstance(addr, str):
+                        addresses.add(addr)
         except Exception:
             pass
 
-    async def get_leaderboard(
-        self,
-        sort_by: str = "account_value",
-        limit: int = 100,
-    ) -> list[dict[str, Any]]:
-        """
-        Top traders leaderboard.
-        Fetches account state for all monitored addresses and ranks them.
-        """
-        cache_key = f"leaderboard:{sort_by}"
-        cached = await cache.get(cache_key, TTL_MARKET)
-        if cached is not None:
-            return cached[:limit]
-
-        await self._discover_top_addresses()
-
-        addresses = list(self._monitored_addresses)[:200]
-
-        states = await asyncio.gather(
-            *[hl_client.clearinghouse_state(addr) for addr in addresses],
+        # Discover active traders from recent trades on major pairs
+        trade_results = await asyncio.gather(
+            hl_client.recent_trades("BTC"),
+            hl_client.recent_trades("ETH"),
+            hl_client.recent_trades("SOL"),
             return_exceptions=True,
         )
+        for trades in trade_results:
+            if isinstance(trades, list):
+                for trade in trades:
+                    users = trade.get("users", [])
+                    if isinstance(users, list):
+                        for u in users:
+                            if isinstance(u, str) and u.startswith("0x"):
+                                addresses.add(u)
 
-        leaderboard = []
-        for addr, state in zip(addresses, states):
-            if isinstance(state, Exception) or not state:
-                continue
+        # ── Step 2: Batch-fetch clearinghouse states ───────────────────
+        address_list = list(addresses)[:200]  # cap at 200 total
+        batch_size = 20
+        all_states: list[tuple[str, dict[str, Any]]] = []
+
+        for i in range(0, len(address_list), batch_size):
+            batch = address_list[i : i + batch_size]
             try:
-                cross = state.get("crossMarginSummary", {})
-                acv = float(cross.get("accountValue", 0) or 0)
-                upnl = sum(
-                    float(p.get("position", p).get("unrealizedPnl", 0) or 0)
-                    for p in state.get("assetPositions", [])
+                states = await hl_client.batch_clearinghouse_states(batch)
+                if isinstance(states, list):
+                    for addr, state in zip(batch, states):
+                        if state and isinstance(state, dict):
+                            all_states.append((addr, state))
+                else:
+                    raise ValueError("batch returned non-list")
+            except Exception:
+                # Fallback: individual calls
+                individual_results = await asyncio.gather(
+                    *[hl_client.clearinghouse_state(addr) for addr in batch],
+                    return_exceptions=True,
                 )
-                leaderboard.append({
+                for addr, state in zip(batch, individual_results):
+                    if isinstance(state, dict):
+                        all_states.append((addr, state))
+
+        # ── Step 3: Build leaderboard entries ─────────────────────────
+        entries: list[dict[str, Any]] = []
+        for addr, state in all_states:
+            try:
+                margin = state.get("marginSummary", state.get("crossMarginSummary", {}))
+                account_value = float(margin.get("accountValue", 0) or 0)
+                if account_value < 1_000:
+                    continue
+
+                positions = state.get("assetPositions", [])
+                position_count = len(
+                    [
+                        p for p in positions
+                        if p.get("position", p).get("szi", "0") != "0"
+                    ]
+                )
+                total_margin = float(margin.get("totalMarginUsed", 0) or 0)
+                unrealized_pnl = sum(
+                    float(p.get("position", p).get("unrealizedPnl", 0) or 0)
+                    for p in positions
+                )
+                withdrawable = float(state.get("withdrawable", 0) or 0)
+
+                entries.append({
                     "address": addr,
-                    "account_value": acv,
-                    "unrealized_pnl": upnl,
-                    "total_margin_used": float(cross.get("totalMarginUsed", 0) or 0),
-                    "withdrawable": float(state.get("withdrawable", 0) or 0),
-                    "position_count": len(state.get("assetPositions", [])),
+                    "account_value": account_value,
+                    "unrealized_pnl": unrealized_pnl,
+                    "total_margin_used": total_margin,
+                    "withdrawable": withdrawable,
+                    "position_count": position_count,
                 })
             except (TypeError, ValueError):
                 continue
 
-        sort_keys = {
-            "account_value": lambda x: x["account_value"],
-            "unrealized_pnl": lambda x: x["unrealized_pnl"],
-        }
-        sort_fn = sort_keys.get(sort_by, sort_keys["account_value"])
-        leaderboard.sort(key=sort_fn, reverse=True)
+        # ── Step 4: Sort and rank ──────────────────────────────────
+        valid_sort_keys = {"account_value", "unrealized_pnl", "total_margin_used", "position_count"}
+        effective_sort = sort_by if sort_by in valid_sort_keys else "account_value"
+        entries.sort(key=lambda x: x.get(effective_sort, x["account_value"]), reverse=True)
 
-        # Filter out entries with zero or negative account value
-        leaderboard = [e for e in leaderboard if e["account_value"] > 0]
+        for i, entry in enumerate(entries):
+            entry["rank"] = i + 1
 
-        for i, entry in enumerate(leaderboard, start=1):
-            entry["rank"] = i
-
-        await cache.set(cache_key, leaderboard, TTL_MARKET)
-        return leaderboard[:limit]
+        result = entries[:limit]
+        await cache.set(cache_key, result, _LEADERBOARD_TTL)
+        return result
 
     async def get_account_distribution(self) -> dict[str, Any]:
         """

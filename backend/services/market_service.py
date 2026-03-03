@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 class MarketService:
     """Aggregated market data service."""
 
-    # ── Overview / KPI Data ───────────────────────────────────────────────────
+    # ── Overview / KPI Data ───────────────────────────────────────────────────────
 
     async def get_kpis(self) -> dict[str, Any]:
         """
@@ -399,24 +399,30 @@ class MarketService:
         if cached is not None:
             return cached
 
-        raw = await coinglass_client.liquidation_aggregated_history(
+        # Convert interval format: "1h" -> "h1", "4h" -> "h4", "1d" -> "h24"
+        cg_interval = interval
+        if interval.endswith("h"):
+            cg_interval = f"h{interval[:-1]}"
+        elif interval == "1d":
+            cg_interval = "h24"
+
+        raw = await coinglass_client.liquidation_aggregated_history_v2(
             symbol=asset,
-            exchange=exchange if exchange != "Hyperliquid" else None,
-            interval=interval,
+            exchange_list=exchange,
+            interval=cg_interval,
             limit=limit,
         )
 
         if not raw or not raw.get("data"):
             return []
 
-        items = raw["data"]
         result = []
-        for item in items:
+        for item in raw["data"]:
             try:
                 result.append({
-                    "time": item.get("t", item.get("timestamp", 0)),
-                    "long_liquidation_usd": float(item.get("longLiquidationUsd", 0) or 0),
-                    "short_liquidation_usd": float(item.get("shortLiquidationUsd", 0) or 0),
+                    "time": item.get("time", item.get("t", item.get("timestamp", 0))),
+                    "long_liquidation_usd": float(item.get("aggregated_long_liquidation_usd", item.get("longLiquidationUsd", 0)) or 0),
+                    "short_liquidation_usd": float(item.get("aggregated_short_liquidation_usd", item.get("shortLiquidationUsd", 0)) or 0),
                 })
             except (TypeError, ValueError):
                 continue
@@ -437,10 +443,17 @@ class MarketService:
         if cached is not None:
             return cached
 
-        raw = await coinglass_client.taker_buy_sell_volume(
+        # Convert interval format: "1h" -> "h1", "4h" -> "h4", "1d" -> "h24"
+        cg_interval = interval
+        if interval.endswith("h"):
+            cg_interval = f"h{interval[:-1]}"
+        elif interval == "1d":
+            cg_interval = "h24"
+
+        raw = await coinglass_client.aggregated_taker_volume_v2(
             symbol=asset,
-            exchange=exchange,
-            interval=interval,
+            exchange_list=exchange,
+            interval=cg_interval,
             limit=limit,
         )
 
@@ -451,9 +464,9 @@ class MarketService:
         for item in raw["data"]:
             try:
                 result.append({
-                    "time": item.get("t", item.get("timestamp", 0)),
-                    "buy_volume": float(item.get("buyVolUsd", item.get("buy", 0)) or 0),
-                    "sell_volume": float(item.get("sellVolUsd", item.get("sell", 0)) or 0),
+                    "time": item.get("time", item.get("t", 0)),
+                    "buy_volume": float(item.get("aggregated_buy_volume_usd", item.get("buyVolUsd", 0)) or 0),
+                    "sell_volume": float(item.get("aggregated_sell_volume_usd", item.get("sellVolUsd", 0)) or 0),
                 })
             except (TypeError, ValueError):
                 continue
@@ -483,8 +496,9 @@ class MarketService:
             return_exceptions=True,
         )
 
-        thresholds = {"BTC": 100_000, "ETH": 100_000}
-        default_threshold = 10_000
+        # Lower thresholds — most HL trades are smaller than $100k notional
+        thresholds = {"BTC": 50_000, "ETH": 50_000}
+        default_threshold = 5_000
 
         large_trades = []
         for coin, trades in zip(top_coins, results):
@@ -519,7 +533,7 @@ class MarketService:
     async def get_volume_history(self) -> list[dict[str, Any]]:
         """
         Daily volume history. Uses in-memory buffer first,
-        falls back to CoinGlass taker volume data if buffer is insufficient.
+        falls back to CoinGlass aggregated taker volume data if buffer is insufficient.
         """
         data = await volume_history.get_all()
         if len(data) >= 5:
@@ -531,26 +545,28 @@ class MarketService:
                 for ts, v in data
             ]
 
-        # Fallback: fetch from CoinGlass taker volume
+        # Fallback: fetch from CoinGlass aggregated taker volume
+        # Uses the working endpoint: /api/futures/aggregated-taker-buy-sell-volume/history
         cache_key = "overview:volume_history_fallback"
         cached = await cache.get(cache_key, 3600)  # 1h cache
         if cached is not None:
             return cached
 
         try:
-            raw = await coinglass_client.taker_buy_sell_volume(
+            # Convert interval for CoinGlass: "1d" -> "h24"
+            raw = await coinglass_client.aggregated_taker_volume_v2(
                 symbol="BTC",
-                exchange="Hyperliquid",
-                interval="1d",
+                exchange_list="Hyperliquid",
+                interval="h24",
                 limit=90,
             )
             result = []
             if isinstance(raw, dict) and raw.get("data"):
                 for item in raw["data"]:
                     try:
-                        ts = item.get("t", item.get("timestamp", 0))
-                        buy = float(item.get("buyVolUsd", item.get("buy", item.get("buyVolume", 0))) or 0)
-                        sell = float(item.get("sellVolUsd", item.get("sell", item.get("sellVolume", 0))) or 0)
+                        ts = item.get("time", item.get("t", item.get("timestamp", 0)))
+                        buy = float(item.get("aggregated_buy_volume_usd", item.get("buyVolUsd", item.get("buy", item.get("buyVolume", 0)))) or 0)
+                        sell = float(item.get("aggregated_sell_volume_usd", item.get("sellVolUsd", item.get("sell", item.get("sellVolume", 0)))) or 0)
                         total = buy + sell
                         if total > 0:
                             result.append({"timestamp": int(ts), "total_volume": total})
@@ -576,37 +592,68 @@ class MarketService:
         interval: str = "1h",
         limit: int = 200,
     ) -> list[dict[str, Any]]:
-        """OI over time for an asset from CoinGlass."""
+        """OI over time for an asset. Uses ring buffers first, falls back to CoinGlass."""
         cache_key = f"oi_history:{asset}:{exchange}:{interval}"
         cached = await cache.get(cache_key, TTL_COINGLASS)
         if cached is not None:
             return cached
 
-        raw = await coinglass_client.oi_ohlc_history(
-            symbol=asset,
-            exchange=exchange,
-            interval=interval,
-            limit=limit,
-        )
+        # Strategy 1: For total HL OI, use the ring buffer accumulated by background tasks
+        if asset.upper() in ("ALL", "TOTAL") or exchange == "Hyperliquid":
+            data = await oi_history.get_all()
+            if len(data) >= 5:
+                result = [
+                    {"time": int(ts * 1000), "oi_usd": v.get("total_oi", 0)}
+                    for ts, v in data
+                    if isinstance(v, dict)
+                ]
+                if result:
+                    await cache.set(cache_key, result, 300)
+                    return result[-limit:]
 
-        if not raw or not raw.get("data"):
-            return []
+        # Strategy 2: Use per-asset snapshots from the market_snapshot_history ring buffer
+        data = await market_snapshot_history.get_all()
+        if len(data) >= 5:
+            result = []
+            for ts, snapshot in data:
+                if isinstance(snapshot, dict):
+                    assets = snapshot.get("assets", [])
+                    for a in assets:
+                        if isinstance(a, dict) and a.get("asset", "").upper() == asset.upper():
+                            result.append({"time": int(ts * 1000), "oi_usd": a.get("oi_usd", 0)})
+                            break
+            if result:
+                await cache.set(cache_key, result, 300)
+                return result[-limit:]
 
-        result = []
-        for item in raw["data"]:
-            try:
-                result.append({
-                    "time": item.get("t", item.get("timestamp", 0)),
-                    "open": float(item.get("o", 0) or 0),
-                    "high": float(item.get("h", 0) or 0),
-                    "low": float(item.get("l", 0) or 0),
-                    "close": float(item.get("c", 0) or 0),
-                })
-            except (TypeError, ValueError):
-                continue
+        # Strategy 3: CoinGlass fallback (won't work on Startup tier but keep for future)
+        try:
+            raw = await coinglass_client.oi_ohlc_history(
+                symbol=asset,
+                exchange=exchange,
+                interval=interval,
+                limit=limit,
+            )
+            if raw and raw.get("data"):
+                result = []
+                for item in raw["data"]:
+                    try:
+                        result.append({
+                            "time": item.get("t", item.get("timestamp", 0)),
+                            "open": float(item.get("o", 0) or 0),
+                            "high": float(item.get("h", 0) or 0),
+                            "low": float(item.get("l", 0) or 0),
+                            "close": float(item.get("c", 0) or 0),
+                        })
+                    except (TypeError, ValueError):
+                        continue
+                if result:
+                    await cache.set(cache_key, result, TTL_COINGLASS)
+                    return result
+        except Exception as exc:
+            logger.debug("CoinGlass OI history not available: %s", exc)
 
-        await cache.set(cache_key, result, TTL_COINGLASS)
-        return result
+        return []
 
     async def get_sparklines(self) -> dict[str, list[float]]:
         """

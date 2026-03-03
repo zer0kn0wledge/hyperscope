@@ -88,6 +88,12 @@ class HyperliquidClient(BaseHTTPClient):
         """User's perp account state. Weight: 2"""
         return await self._info({"type": "clearinghouseState", "user": user, "dex": ""})
 
+    async def batch_clearinghouse_states(
+        self, users: list[str]
+    ) -> list[dict[str, Any] | None] | None:
+        """Batch fetch clearinghouse states for multiple users. Weight: 2 per user"""
+        return await self._info({"type": "batchClearinghouseStates", "users": users})
+
     async def spot_clearinghouse_state(self, user: str) -> dict[str, Any] | None:
         """User's spot token balances. Weight: 2"""
         return await self._info({"type": "spotClearinghouseState", "user": user})
@@ -176,6 +182,10 @@ class HyperliquidClient(BaseHTTPClient):
     async def vault_summaries(self) -> list[dict[str, Any]] | None:
         """All vaults overview. Weight: 20"""
         return await self._info({"type": "vaultSummaries"})
+
+    async def leaderboard(self) -> list[dict[str, Any]] | None:
+        """Hyperliquid native leaderboard (if available). Weight: 20"""
+        return await self._info({"type": "leaderboard"})
 
     async def delegator_summary(self, user: str) -> dict[str, Any] | None:
         """User's HYPE staking summary. Weight: 20"""

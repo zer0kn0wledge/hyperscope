@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 AF_REVENUE_FRACTION = 0.97  # 97% to Assistance Fund
 HLP_REVENUE_FRACTION = 0.03  # 3% to HLP
 
+# HLP vault address constant (same as settings.hlp_vault_address but available locally)
+_HLP_VAULT_ADDRESS = "0xdfc24b077bc1425ad1dea75bcb6f8158e10df303"
+
 
 class ProtocolService:
     """Service for protocol health and revenue analytics."""
@@ -167,7 +170,7 @@ class ProtocolService:
         if cached is not None:
             return cached
 
-        hlp_address = settings.hlp_vault_address
+        hlp_address = getattr(settings, "hlp_vault_address", _HLP_VAULT_ADDRESS)
 
         vault_data, positions_data = await asyncio.gather(
             hl_client.vault_details(vault_address=hlp_address),
@@ -192,17 +195,26 @@ class ProtocolService:
             result["name"] = vault_data.get("name", "HLP")
             result["apr"] = float(vault_data.get("apr", 0) or 0)
             result["total_volume"] = float(vault_data.get("vlm", 0) or 0)
+
+            # Depositor count from followers list
             followers = vault_data.get("followers", [])
             result["depositor_count"] = len(followers)
 
+            # TVL from followers' vaultEquity
             total_equity = 0.0
             for follower in followers:
                 try:
                     total_equity += float(follower.get("vaultEquity", 0) or 0)
                 except (TypeError, ValueError):
                     pass
-            result["tvl"] = total_equity
+            if total_equity > 0:
+                result["tvl"] = total_equity
 
+            # ── Account value history ──────────────────────────────────
+            # vault_details may return portfolio nested dict or top-level arrays
+            portfolio = vault_data.get("portfolio")
+
+            # Top-level accountValueHistory / pnlHistory (older API shape)
             for entry in vault_data.get("accountValueHistory", []):
                 if isinstance(entry, (list, tuple)) and len(entry) == 2:
                     try:
@@ -223,6 +235,61 @@ class ProtocolService:
                     except (TypeError, ValueError):
                         pass
 
+            # portfolio nested dict (newer API shape: {"accountValueHistory": [...], "pnlHistory": [...]})
+            if isinstance(portfolio, dict):
+                if not result["account_value_history"]:
+                    for entry in portfolio.get("accountValueHistory", []):
+                        if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                            try:
+                                result["account_value_history"].append({
+                                    "date": entry[0],
+                                    "value": float(entry[1]) if entry[1] else 0.0,
+                                })
+                            except (TypeError, ValueError):
+                                pass
+                if not result["pnl_history"]:
+                    for entry in portfolio.get("pnlHistory", []):
+                        if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                            try:
+                                result["pnl_history"].append({
+                                    "date": entry[0],
+                                    "value": float(entry[1]) if entry[1] else 0.0,
+                                })
+                            except (TypeError, ValueError):
+                                pass
+
+            # portfolio as a list of time-bucketed arrays
+            # Shape: [[timestamp, accountValue, pnl], ...] or [[timestamp, value], ...]
+            elif isinstance(portfolio, list):
+                if not result["account_value_history"]:
+                    for entry in portfolio:
+                        if isinstance(entry, (list, tuple)):
+                            if len(entry) >= 2:
+                                try:
+                                    result["account_value_history"].append({
+                                        "date": entry[0],
+                                        "value": float(entry[1]) if entry[1] else 0.0,
+                                    })
+                                except (TypeError, ValueError):
+                                    pass
+                            if len(entry) >= 3 and not result["pnl_history"]:
+                                try:
+                                    result["pnl_history"].append({
+                                        "date": entry[0],
+                                        "value": float(entry[2]) if entry[2] else 0.0,
+                                    })
+                                except (TypeError, ValueError):
+                                    pass
+
+            # followerState carries the vault's own equity as TVL fallback
+            follower_state = vault_data.get("followerState")
+            if isinstance(follower_state, dict) and result["tvl"] == 0.0:
+                try:
+                    result["tvl"] = float(follower_state.get("vaultEquity", 0) or 0)
+                except (TypeError, ValueError):
+                    pass
+
+        # ── Current positions from clearinghouse state ─────────────────────
         if isinstance(positions_data, dict):
             for pos_wrapper in positions_data.get("assetPositions", []):
                 pos = pos_wrapper.get("position", pos_wrapper)
@@ -241,11 +308,10 @@ class ProtocolService:
                 except (TypeError, ValueError):
                     continue
 
-            cross = positions_data.get("crossMarginSummary", {})
-            result["tvl"] = max(
-                result["tvl"],
-                float(cross.get("accountValue", 0) or 0),
-            )
+            # Use clearinghouse account value as TVL if vault_data had none
+            cross = positions_data.get("crossMarginSummary", positions_data.get("marginSummary", {}))
+            cs_account_value = float(cross.get("accountValue", 0) or 0)
+            result["tvl"] = max(result["tvl"], cs_account_value)
 
         await cache.set(cache_key, result, TTL_PROTOCOL)
         return result
@@ -366,7 +432,7 @@ class ProtocolService:
         return result
 
     async def get_tvl(self) -> dict[str, Any]:
-        """Protocol TVL from DeFiLlama."""
+        """Protocol TVL from DeFiLlama with prev-day/week/month computed from history."""
         cache_key = "protocol:tvl"
         cached = await cache.get(cache_key, TTL_TVL)
         if cached is not None:
@@ -384,11 +450,14 @@ class ProtocolService:
             "timestamp": int(time.time() * 1000),
         }
 
+        # Build tvl_history from chainTvls or tvl array in protocol response
         if isinstance(protocol, dict):
+            # Try explicit prev-day/week/month fields first
             result["tvl_prev_day"] = float(protocol.get("tvlPrevDay", 0) or 0)
             result["tvl_prev_week"] = float(protocol.get("tvlPrevWeek", 0) or 0)
             result["tvl_prev_month"] = float(protocol.get("tvlPrevMonth", 0) or 0)
 
+            # Build history from chainTvls (most reliable)
             chain_tvls = protocol.get("chainTvls", {})
             if chain_tvls:
                 for chain_data in chain_tvls.values():
@@ -400,9 +469,99 @@ class ProtocolService:
                                     "date": entry.get("date", 0),
                                     "totalLiquidityUSD": float(entry.get("totalLiquidityUSD", 0) or 0),
                                 })
+                        if result["tvl_history"]:
+                            break
+
+            # Fallback: top-level tvl array
+            if not result["tvl_history"]:
+                for entry in protocol.get("tvl", [])[-90:]:
+                    if isinstance(entry, dict):
+                        result["tvl_history"].append({
+                            "date": entry.get("date", 0),
+                            "totalLiquidityUSD": float(entry.get("totalLiquidityUSD", entry.get("totalLiquidity", 0)) or 0),
+                        })
+
+        # ── Compute prev_day / prev_week / prev_month from history ─────────
+        # Overrides zeros from the protocol dict when history is available.
+        if result["tvl_history"]:
+            now_ts = int(time.time())
+            cutoff_day = now_ts - 86_400
+            cutoff_week = now_ts - 7 * 86_400
+            cutoff_month = now_ts - 30 * 86_400
+
+            # Walk history in reverse to find closest entry at or before each cutoff
+            sorted_history = sorted(result["tvl_history"], key=lambda e: e["date"])
+
+            def _find_value_at(cutoff: int) -> float:
+                best_val = 0.0
+                for entry in sorted_history:
+                    if entry["date"] <= cutoff:
+                        best_val = entry["totalLiquidityUSD"]
+                    else:
                         break
+                return best_val
+
+            if result["tvl_prev_day"] == 0.0:
+                result["tvl_prev_day"] = _find_value_at(cutoff_day)
+            if result["tvl_prev_week"] == 0.0:
+                result["tvl_prev_week"] = _find_value_at(cutoff_week)
+            if result["tvl_prev_month"] == 0.0:
+                result["tvl_prev_month"] = _find_value_at(cutoff_month)
 
         await cache.set(cache_key, result, TTL_TVL)
+        return result
+
+    async def get_volume(self) -> dict[str, Any]:
+        """
+        Protocol trading volume: daily chart derived from DeFiLlama fees.
+        Fees and volume are closely correlated on Hyperliquid.
+        Also exposes the in-memory volume_history ring buffer when populated
+        by the background monitor.
+        """
+        cache_key = "protocol:volume"
+        cached = await cache.get(cache_key, TTL_FEES)
+        if cached is not None:
+            return cached
+
+        fees_data = await self.get_fees()
+
+        # Build a volume proxy from the fees daily chart.
+        # Hyperliquid charges ~0.02–0.035% per side, so volume ≈ fees / 0.00025
+        # (conservative midpoint).  This is labeled clearly so the frontend
+        # knows it is an estimate.
+        FEE_RATE = 0.00025  # 0.025% blended take rate
+        daily_chart = []
+        for entry in fees_data.get("daily_chart", []):
+            fees_val = entry.get("fees", 0.0)
+            daily_chart.append({
+                "date": entry["date"],
+                "fees": fees_val,
+                "volume_estimate": fees_val / FEE_RATE if FEE_RATE > 0 else 0.0,
+            })
+
+        # Try to enrich with actual volume from the in-memory ring buffer
+        # populated by the background service.
+        try:
+            from services.cache import volume_history  # type: ignore[attr-defined]
+            vol_entries = await volume_history.get_all()
+            ring_chart = [
+                {"timestamp": int(ts * 1000), "volume": v}
+                for ts, v in vol_entries
+                if isinstance(v, (int, float))
+            ]
+        except Exception:
+            ring_chart = []
+
+        result = {
+            "total_24h": fees_data["total_24h"] / FEE_RATE if FEE_RATE > 0 else 0.0,
+            "total_7d": fees_data["total_7d"] / FEE_RATE if FEE_RATE > 0 else 0.0,
+            "total_30d": fees_data["total_30d"] / FEE_RATE if FEE_RATE > 0 else 0.0,
+            "daily_chart": daily_chart,
+            "ring_buffer_chart": ring_chart,
+            "note": "volume_estimate derived from fees / 0.025% blended rate",
+        }
+
+        await cache.set(cache_key, result, TTL_FEES)
         return result
 
 

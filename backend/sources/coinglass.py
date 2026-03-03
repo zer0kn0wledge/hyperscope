@@ -175,6 +175,26 @@ class CoinGlassClient(BaseHTTPClient):
         """All supported futures exchanges and trading pairs."""
         return await self.get("/api/futures/supported-exchange-pairs")
 
+    # ── V4 Corrected-format methods ───────────────────────────────────────
+
+    async def liquidation_aggregated_history_v2(
+        self, symbol: str, exchange_list: str = "Hyperliquid", interval: str = "h1", limit: int = 200,
+    ) -> dict[str, Any] | None:
+        """Aggregated liquidations - V4 API format with exchange_list and h-prefixed intervals."""
+        return await self.get(
+            "/api/futures/liquidation/aggregated-history",
+            params={"symbol": symbol, "exchange_list": exchange_list, "interval": interval, "limit": limit},
+        )
+
+    async def aggregated_taker_volume_v2(
+        self, symbol: str, exchange_list: str = "Hyperliquid", interval: str = "h1", limit: int = 200,
+    ) -> dict[str, Any] | None:
+        """Aggregated taker buy/sell volume - V4 API format."""
+        return await self.get(
+            "/api/futures/aggregated-taker-buy-sell-volume/history",
+            params={"symbol": symbol, "exchange_list": exchange_list, "interval": interval, "limit": limit},
+        )
+
 
 # Singleton instance
 coinglass_client = CoinGlassClient()
